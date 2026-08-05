@@ -1,5 +1,10 @@
 from datetime import time
+from zoneinfo import ZoneInfo
 
+# ==========================================================
+# Setting up the time zone
+# ==========================================================
+IST = ZoneInfo("Asia/Kolkata")
 
 class MarketConfig:
     """

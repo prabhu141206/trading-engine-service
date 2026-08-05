@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from market_session.market_event import MarketEvent
+from event_system.event_type import EventType
 
 from .market_calendar import MarketCalendar
 from .market_config import MarketConfig
@@ -57,7 +57,7 @@ class MarketScheduler:
         )
 
         return NextMarketEvent(
-            event=MarketEvent.MARKET_OPEN,
+            event=EventType.MARKET_OPEN,
             event_time=event_time,
             sleep_seconds=sleep_seconds
         )

@@ -1,15 +1,13 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from market_session.market_event import MarketEvent
+from event_system.event_type import EventType
+from market_session.market_state import MarketState
 
 
 @dataclass(frozen=True)
 class NextMarketEvent:
-    """
-    Represents the next scheduled market event.
-    """
-
-    event: MarketEvent
+    event: EventType
     event_time: datetime
     sleep_seconds: int
+    market_state: MarketState
