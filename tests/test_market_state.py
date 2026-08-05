@@ -1,4 +1,4 @@
-from market_session.market_state import MarketState
+from src.market_session.market_state import MarketState
 
 
 def test_market_state_values():
