@@ -1,0 +1,20 @@
+trading_engine/
+
+├── docs/
+│   ├── 01_market_session_manager.md
+│   ├── 02_session_manager.md
+│   ├── ...
+│   └── 14_trading_engine_service.md
+│
+├── src/
+│   ├── market_session/
+│   ├── session/
+│   ├── market_data/
+│   ├── strategy/
+│   ├── trading/
+│   └── ...
+│
+└── tests/
+    ├── test_market_session.py
+    ├── test_session_manager.py
+    ├── ...
