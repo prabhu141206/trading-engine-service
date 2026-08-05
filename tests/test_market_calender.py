@@ -1,6 +1,6 @@
 from datetime import date
 
-from src.market_session.market_calender import MarketCalendar
+from market_session.market_calendar import MarketCalendar
 
 
 calendar = MarketCalendar()
