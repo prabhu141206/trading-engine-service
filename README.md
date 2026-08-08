@@ -2,6 +2,11 @@
 
 Production-style event-driven algorithmic trading backend architecture built in Python.
 
+## Main Branch
+
+The `main` branch contains all completed modules and acts as the cumulative architecture reference.
+
+
 ## Architecture Goals
 
 - Event-driven communication
