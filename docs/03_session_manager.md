@@ -305,3 +305,39 @@ The **SessionManager** is the component responsible for maintaining the lifecycl
 It reacts to `MARKET_OPEN` and `MARKET_CLOSE` events published through the `EventBus`, creates `UserSession` objects when the market opens, stores them in memory, and removes them when the market closes.
 
 This module establishes the first complete event-driven business workflow in the trading engine and forms the foundation for multi-user strategy execution in later modules.
+
+---
+
+
+## Event System Integration
+
+### Role in Event-Driven Architecture
+
+The **SessionManager** acts as a **subscriber** in the event-driven architecture.
+
+It listens for market lifecycle events published by the `MarketSessionManager` through the `EventBus`.
+
+### Subscribed Events
+
+* `MARKET_OPEN`
+* `MARKET_CLOSE`
+
+### Integration Flow
+
+```text
+MarketSessionManager
+        │ Publish MARKET_OPEN / MARKET_CLOSE
+        ▼
+EventBus
+        ▼
+SessionManager
+        ▼
+UserSession Lifecycle
+```
+
+### Behavior
+
+* On `MARKET_OPEN` → create active `UserSession` objects.
+* On `MARKET_CLOSE` → clear active sessions.
+
+The SessionManager does not directly communicate with the publisher. It reacts only to events received from the `EventBus`, which keeps the modules loosely coupled.

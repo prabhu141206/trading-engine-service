@@ -284,3 +284,36 @@ Its only responsibilities are to:
 5. Repeat until the service is stopped.
 
 It serves as the bridge between market scheduling and the event-driven components of the trading engine.
+
+---
+
+## Event System Integration
+
+### Role in Event-Driven Architecture
+
+The **MarketSessionManager** acts as a **publisher** in the event-driven architecture.
+
+It does not know which services are interested in market events. Its responsibility is only to publish market lifecycle events through the `EventBus`.
+
+### Published Events
+
+* `MARKET_OPEN`
+* `MARKET_CLOSE`
+
+### Integration Flow
+
+```text
+MarketScheduler
+      │
+      ▼
+MarketSessionManager
+      │ Publish Event
+      ▼
+EventBus
+      │
+      ▼
+Interested Subscribers
+```
+
+At this stage, the document focuses on the publisher side of the architecture. Subscribers are introduced in later modules.
+
