@@ -1,400 +1,377 @@
-
----
-
-# Module: Event Bus
+# Event System
 
 ## Purpose
 
-The Event Bus provides communication between modules **without them knowing about each other**.
+The **Event System** provides communication between independent modules of the trading engine.
 
-Example:
+Instead of modules calling each other directly, they communicate by publishing and subscribing to events through the `EventBus`.
 
-```text id="nsv98i"
+This keeps modules loosely coupled, easier to maintain, and easier to test.
+
+---
+
+# Responsibilities
+
+* Register subscribers for specific event types.
+* Publish events to all interested subscribers.
+* Decouple producers from consumers.
+* Deliver events in the order they are published.
+* Maintain thread-safe event registration and publishing.
+
+---
+
+# Not Responsible For
+
+The Event System does **not**:
+
+* Execute business logic.
+* Store market data.
+* Manage user sessions.
+* Process trading strategies.
+* Calculate indicators.
+* Execute trades.
+
+Its only responsibility is event communication.
+
+---
+
+# Components
+
+```text
+event_system/
+
+├── event.py
+├── event_type.py
+└── event_bus.py
+```
+
+---
+
+# Component Responsibilities
+
+## Event
+
+Represents a single event flowing through the system.
+
+### Fields
+
+```python
+event_type
+payload
+```
+
+### Example
+
+```text
+Event
+│
+├── event_type = MARKET_OPEN
+└── payload = NextMarketEvent(...)
+```
+
+---
+
+## EventType
+
+Defines every event that can exist in the trading engine.
+
+It is the **single source of truth** for all event names.
+
+### Example
+
+```python
+MARKET_OPEN
+MARKET_CLOSE
+```
+
+As the project grows, new events will be added here.
+
+Examples:
+
+* CANDLE_COMPLETED
+* EMA_UPDATED
+* SIGNAL_GENERATED
+* ORDER_PLACED
+* ORDER_FILLED
+
+---
+
+## EventBus
+
+Acts as the communication hub.
+
+It receives events from producers and delivers them to all registered subscribers.
+
+---
+
+# Input
+
+The EventBus receives an `Event` object.
+
+```text
+Event
+│
+├── event_type
+└── payload
+```
+
+The event can originate from any producer module.
+
+Examples:
+
+* MarketSessionManager
+* CandleBuilder
+* IndicatorEngine
+* TradingEngine
+
+---
+
+# Processing
+
+When an event is published:
+
+1. Read the event type.
+2. Find all subscribers registered for that event.
+3. Execute each subscriber callback.
+4. Return after all callbacks finish.
+
+---
+
+# Output
+
+The EventBus does not return data.
+
+Its output is the execution of subscriber callbacks.
+
+```text
+EventBus
+
+↓
+
+Subscriber A
+
+↓
+
+Subscriber B
+
+↓
+
+Subscriber C
+```
+
+---
+
+# Architecture Flow
+
+```text
+Producer
+
+↓
+
+Event
+
+↓
+
+EventBus
+
+↓
+
+Subscribers
+```
+
+---
+
+# Publish Flow
+
+```text
 MarketSessionManager
 
 ↓
 
-Publish
+Publish MARKET_OPEN
+
+↓
+
+EventBus
+
+↓
+
+SessionManager
+
+↓
+
+Create User Sessions
+```
+
+---
+
+# Subscribe Flow
+
+```text
+SessionManager
+
+↓
+
+Subscribe
+
+↓
 
 MARKET_OPEN
 
 ↓
 
-Event Bus
+Wait for notification
+```
+
+---
+
+# Why EventBus?
+
+Without an EventBus:
+
+```text
+MarketSessionManager
 
 ↓
 
 SessionManager
+
+↓
+
+MarketDataPipeline
+
+↓
+
+TradingEngine
 ```
 
-The MarketSessionManager never imports or calls the SessionManager directly.
+Every module directly depends on another module.
 
----
+With an EventBus:
 
-# Responsibility
+```text
+Producer
 
-Only three responsibilities.
+↓
 
-1. Register subscribers.
-2. Publish events.
-3. Remove subscribers.
+EventBus
 
-Nothing else.
+↓
 
-It should **never**:
-
-* Know about trading.
-* Know about users.
-* Know about strategies.
-* Process events.
-* Retry events.
-* Store events permanently.
-
----
-
-# Inputs
-
-```text id="gt0o0e"
-Event Type
-
-Event Object
+Consumers
 ```
 
+Modules no longer need to know who is listening.
+
 ---
 
-# Outputs
+# Benefits
 
-Notify all subscribers.
+* Loose coupling
+* Easy module replacement
+* Better scalability
+* Easier testing
+* Event-driven architecture
+* Independent module development
+
+---
+
+# Thread Safety
+
+The EventBus is thread-safe.
+
+Multiple modules can publish or subscribe without corrupting the subscriber registry.
+
+Synchronization is handled internally by the EventBus.
 
 ---
 
 # Public API
 
-I would keep it very small.
-
 ```python
-class EventBus:
+subscribe()
 
-    def subscribe(...):
-        ...
+unsubscribe()
 
-    def unsubscribe(...):
-        ...
-
-    def publish(...):
-        ...
+publish()
 ```
-
-Only three public methods.
 
 ---
 
 # Internal Data
 
-Internally, the Event Bus only stores:
+The EventBus maintains a subscriber registry.
 
-```text id="4g35zw"
-Subscribers
+Conceptually:
 
+```text
 {
-    MARKET_OPEN: [...],
+    MARKET_OPEN: [
+        callback1,
+        callback2
+    ],
 
-    MARKET_CLOSE: [...],
-
-    CANDLE_COMPLETED: [...],
-
-    EMA_UPDATED: [...]
+    MARKET_CLOSE: [
+        callback3
+    ]
 }
 ```
-
-A dictionary.
-
-Key
-
-↓
-
-Event Type
-
-Value
-
-↓
-
-List of Callbacks
-
----
-
-# Internal Flow
-
-## Subscribe
-
-```text id="0fwgzz"
-Subscriber
-
-↓
-
-subscribe()
-
-↓
-
-Dictionary Updated
-```
-
----
-
-## Publish
-
-```text id="m4dg7t"
-Publisher
-
-↓
-
-publish()
-
-↓
-
-Find Subscribers
-
-↓
-
-Call Each Subscriber
-```
-
----
-
-## Unsubscribe
-
-```text id="4ajwxa"
-Subscriber
-
-↓
-
-unsubscribe()
-
-↓
-
-Remove Callback
-```
-
----
-
-# Dependencies
-
-None.
-
-No market modules.
-
-No scheduler.
-
-No session manager.
-
-No websocket.
-
-It should be completely generic.
-
----
-
-# Failure Cases
-
-* Subscribe twice.
-* Publish with no subscribers.
-* Unsubscribe unknown callback.
-* Subscriber throws an exception.
-
-We should define how to handle each.
-
----
-
-# Folder Structure
-
-I would create a new package.
-
-```text id="y2tsqn"
-src/
-
-event_system/
-
-├── __init__.py
-├── event_bus.py
-├── event.py
-├── event_type.py
-├── tests/
-```
-
-Notice something.
-
-I would **not** put the Event Bus inside `market_session`.
-
-Because the Event Bus belongs to the **whole application**, not just market sessions.
-
----
-
-# Event Object
-
-Instead of publishing only:
-
-```python
-"MARKET_OPEN"
-```
-
-I recommend creating an Event model.
-
-```python
-@dataclass(frozen=True)
-class Event:
-
-    event_type: EventType
-
-    payload: object | None
-
-    timestamp: datetime
-```
-
-Now every event has a common structure.
-
-Example:
-
-```python
-Event(
-    event_type=EventType.MARKET_OPEN,
-    payload=None,
-    timestamp=...
-)
-```
-
-Later:
-
-```python
-Event(
-    event_type=EventType.CANDLE_COMPLETED,
-    payload=candle,
-    timestamp=...
-)
-```
-
-The Event Bus doesn't care what's inside `payload`.
-
----
-
-# Event Types
-
-Create one enum.
-
-```python
-class EventType(Enum):
-
-    MARKET_OPEN = ...
-
-    MARKET_CLOSE = ...
-
-    CANDLE_COMPLETED = ...
-
-    EMA_UPDATED = ...
-
-    SIGNAL_GENERATED = ...
-```
-
-Even though you'll only use two initially.
-
-Future modules will reuse the same enum.
 
 ---
 
 # Unit Tests
 
-I would write these tests.
+Verified:
 
-```text id="x6a4ij"
-Subscribe
-
-↓
-
-Publish
-
-↓
-
-Subscriber Called
-```
+* Subscribe registers callbacks.
+* Publish notifies subscribers.
+* Multiple subscribers receive the same event.
+* Unsubscribe removes callbacks.
+* Publishing without subscribers does not fail.
 
 ---
 
-```text id="gqoktl"
-Two Subscribers
+# Integration Test
+
+Verified integration:
+
+```text
+FakeScheduler
 
 ↓
 
-Publish
+MarketSessionManager
 
 ↓
 
-Both Called
+EventBus
+
+↓
+
+Subscriber
 ```
+
+This confirms that events published by the `MarketSessionManager` are correctly delivered through the `EventBus`.
 
 ---
 
-```text id="n6evfu"
-Unsubscribe
+# Design Principles
 
-↓
-
-Publish
-
-↓
-
-Callback Not Called
-```
+* Single Responsibility Principle (SRP)
+* Publish–Subscribe Pattern
+* Dependency Injection
+* Event-Driven Architecture
+* Loose Coupling
+* Thread Safety
 
 ---
 
-```text id="xh0u43"
-Publish
+# Summary
 
-↓
+The Event System is the communication backbone of the trading engine.
 
-No Subscribers
+It enables independent modules to exchange information without direct dependencies.
 
-↓
+Every producer publishes events to the `EventBus`, and every consumer subscribes only to the events it needs.
 
-No Exception
-```
-
----
-
-```text id="5wvduw"
-Duplicate Subscribe
-
-↓
-
-Only One Registration
-```
-
-(or document that duplicates are allowed—pick one behavior and test it.)
-
----
-
-## One design decision before coding
-
-I recommend that the Event Bus be **synchronous** in Version 1.
-
-Meaning:
-
-```text id="dwjlwm"
-publish()
-
-↓
-
-Immediately call every subscriber
-
-↓
-
-Return
-```
-
-No threads.
-
-No queues.
-
-No async.
-
-Why?
-
-Because your application already has multiple threads (Market Session Manager, later the market data pipeline). Keeping the Event Bus synchronous makes it much simpler to reason about and debug. If you later need asynchronous dispatching, you can change the internals without changing the public API. That's a solid foundation for Version 1.
+This architecture allows the trading engine to remain modular, scalable, and easy to extend as new components are added.

@@ -98,6 +98,7 @@ class MarketSessionManager:
         # Scheduler decides the current market state
         self._current_market_state = next_event.market_state
 
+        # Number of seconds to wait
         if not self._wait(next_event.sleep_seconds):
             return False
 
