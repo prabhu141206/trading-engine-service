@@ -2,6 +2,13 @@
 
 Production-style event-driven algorithmic trading backend architecture built in Python.
 
+## Current Branch
+
+`feature/session-manager`
+
+This branch demonstrates the **Session Manager** module and the first complete publisher → event bus → subscriber workflow.
+
+
 ## Architecture Goals
 
 - Event-driven communication
