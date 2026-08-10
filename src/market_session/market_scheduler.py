@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from market_session.market_event import MarketEvent
+from event_system.event_type import EventType
+from market_session.market_state import MarketState
 
 from .market_calendar import MarketCalendar
 from .market_config import MarketConfig
@@ -49,6 +50,25 @@ class MarketScheduler:
             current_datetime
         )
 
+    def _build_market_close_event(
+        self,
+        event_time: datetime,
+        current_datetime: datetime
+    ) -> NextMarketEvent:
+
+        sleep_seconds = self._calculate_sleep_seconds(
+            current_datetime,
+            event_time
+        )
+
+        return NextMarketEvent(
+            event=EventType.MARKET_CLOSE,
+            event_time=event_time,
+            sleep_seconds=sleep_seconds,
+            market_state=MarketState.OPEN
+        )
+
+    
     def _build_market_open_event(self,event_time: datetime,current_datetime: datetime) -> NextMarketEvent:
 
         sleep_seconds = self._calculate_sleep_seconds(
@@ -57,9 +77,10 @@ class MarketScheduler:
         )
 
         return NextMarketEvent(
-            event=MarketEvent.MARKET_OPEN,
+            event=EventType.MARKET_OPEN,
             event_time=event_time,
-            sleep_seconds=sleep_seconds
+            sleep_seconds=sleep_seconds,
+            market_state=MarketState.CLOSED
         )
 
     def _calculate_sleep_seconds(self,current_datetime: datetime,event_time: datetime) -> int:

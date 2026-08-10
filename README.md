@@ -2,11 +2,18 @@
 
 Production-style event-driven algorithmic trading backend architecture built in Python.
 
+<<<<<<< HEAD
 ## Current Branch
 
 `feature/market-session-manager`
 
 This branch demonstrates the **Market Session Manager** module and its integration with the Event System.
+=======
+## Main Branch
+
+The `main` branch contains all completed modules and acts as the cumulative architecture reference.
+
+>>>>>>> origin/main
 
 ## Architecture Goals
 

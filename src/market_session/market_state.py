@@ -3,9 +3,8 @@ from enum import Enum
 
 class MarketState(Enum):
     """
-    Represents the current state of the market session.
+    Represents the current market session state.
     """
 
-    WAITING = "WAITING"
     OPEN = "OPEN"
     CLOSED = "CLOSED"
