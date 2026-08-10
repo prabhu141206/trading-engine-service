@@ -2,318 +2,315 @@
 
 ## Purpose
 
-The **MarketSessionManager** is responsible for controlling the market session lifecycle.
+`MarketSessionManager` controls the **market lifecycle** of the trading system.
 
-It continuously asks the `MarketScheduler` for the next market event, waits until that event occurs, and publishes the event through the `EventBus`.
+It continuously asks `MarketScheduler` for the next market event, waits until that event occurs, and publishes the event through `EventBus`.
 
-It does **not** contain any market timing logic. All business rules related to market timings, holidays, and weekends belong to the `MarketScheduler`.
+This component contains **no market timing business logic**. All exchange timings, holidays, and weekend rules belong to `MarketScheduler`.
 
 ---
 
-# Responsibilities
+## Responsibilities
 
-* Ask the `MarketScheduler` for the next market event.
-* Update the current market state using the scheduler's result.
+* Ask `MarketScheduler` for the next market event.
+* Maintain the current market state (`OPEN` or `CLOSED`).
 * Wait until the scheduled event time.
-* Publish the event through the `EventBus`.
-* Run continuously until the service is stopped.
+* Publish market lifecycle events through `EventBus`.
+* Continue the lifecycle loop until `stop()` is called.
 
 ---
 
-# Not Responsible For
+## What this module does NOT do
 
-The MarketSessionManager does **not**:
+* User session management
+* Symbol subscription management
+* Market data handling
+* Strategy execution
+* Order placement
+* Database access
 
-* Calculate market timings.
-* Check holidays.
-* Check weekends.
-* Decide whether the market is open or closed.
-* Manage user sessions.
-* Handle WebSocket connections.
-* Execute trading strategies.
-
-These responsibilities belong to other modules.
+Those responsibilities belong to other modules.
 
 ---
 
-# Dependencies
+## Dependencies
 
-* MarketScheduler
-* EventBus
-* EventType
-* NextMarketEvent
+### Internal dependencies
+
+* `event_system.event`
+* `event_system.event_bus`
+* `event_system.event_type`
+* `market_session.market_scheduler`
+* `market_session.market_state`
+* `market_session.market_config`
+* `market_session.models`
+
+### External dependencies
+
+* Python `threading`
+* Python `datetime`
 
 ---
 
-## Input
+## Market states
 
-The `MarketSessionManager` receives input from the `MarketScheduler`.
-
-Every scheduling cycle, it calls:
+The market can only be in one of two states:
 
 ```python
-next_event = scheduler.get_next_event(current_time)
+class MarketState(Enum):
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
 ```
 
-The scheduler returns a `NextMarketEvent` object.
+> **Note:** `WAITING` is not a market state. Waiting is an internal behavior of the manager while it sleeps until the next scheduled event.
+
+---
+
+## High-level flow
 
 ```text
-NextMarketEvent
-│
-├── event
-│     ├── MARKET_OPEN
-│     └── MARKET_CLOSE
-│
-├── event_time
-│     └── Exact date & time of the next event
-│
-├── sleep_seconds
-│     └── Number of seconds to wait
-│
-└── market_state
-      ├── WAITING
-      ├── OPEN
-      └── CLOSED
-```
-
-### Meaning of each field
-
-* **event** → Which event should be published after waiting.
-* **event_time** → When that event should occur.
-* **sleep_seconds** → How long the manager should wait before publishing.
-* **market_state** → The current market state calculated by the `MarketScheduler`.
-
-The `MarketSessionManager` does not calculate any of these values. It simply consumes them.
-
-
----
-
-# Output
-
-The manager publishes events through the `EventBus`.
-
-Examples:
-
-* MARKET_OPEN
-* MARKET_CLOSE
-
-These events are consumed by other modules such as the `SessionManager`.
-
----
-
-# Internal State
-
-The manager maintains the following internal state:
-
-* running status
-* background thread
-* stop event
-* current market state
-
----
-
-# Public API
-
-```python
-start()
-
-stop()
-```
-
----
-
-# Private Methods
-
-```python
+main.py
+   ↓
+MarketSessionManager.start()
+   ↓
 _run()
-
-_process_one_iteration()
-
-_wait()
-
-_publish()
-```
-
----
-
-# Workflow
-
-```
-Start Service
-      │
-      ▼
-Background Thread Starts
-      │
-      ▼
-Ask MarketScheduler
-      │
-      ▼
-Receive NextMarketEvent
-      │
-      ▼
-Update Current Market State
-      │
-      ▼
-Wait Until Event Time
-      │
-      ▼
-Publish Event
-      │
-      ▼
+   ↓
+MarketScheduler.get_next_event()
+   ↓
+Update market state
+   ↓
+Wait until event time
+   ↓
+Publish event through EventBus
+   ↓
 Repeat
 ```
 
 ---
 
-# Event Flow
+## Runtime sequence
 
-```
-MarketScheduler
-        │
-        ▼
-NextMarketEvent
-        │
-        ▼
-MarketSessionManager
-        │
-        ▼
-EventBus.publish()
-        │
-        ▼
-Subscribers
-```
-
----
-
-# Market State Ownership
-
-The `MarketScheduler` is the single source of truth for the market state.
-
-The `MarketSessionManager` only stores the state returned by the scheduler.
-
-It never decides whether the market is waiting, open, or closed.
-
----
-
-# Thread Lifecycle
-
-```
-start()
-
-↓
-
-Create Background Thread
-
-↓
-
-_run()
-
-↓
-
-Loop Until stop()
-
-↓
-
-stop()
-
-↓
-
-Wake Waiting Thread
-
-↓
-
-Exit Thread
-```
-
----
-
-# Testing
-
-## Unit Tests
-
-* Verify MARKET_OPEN processing.
-* Verify MARKET_CLOSE processing.
-* Verify market state updates.
-* Verify `_wait()` timeout behavior.
-* Verify `_wait()` interruption.
-* Verify `start()`.
-* Verify `stop()`.
-
-## Integration Test
-
-Verified integration:
-
-```
-FakeScheduler
-      │
-      ▼
-MarketSessionManager
-      │
-      ▼
-EventBus
-      │
-      ▼
-Subscriber
-```
-
-This confirms that the manager successfully publishes events through the `EventBus`.
-
----
-
-# Design Principles
-
-* Single Responsibility Principle (SRP)
-* Dependency Injection
-* Event-Driven Architecture
-* Separation of Concerns
-* Interruptible background worker using `threading.Event`
-* Scheduler owns all market timing and state logic
-
----
-
-# Summary
-
-The `MarketSessionManager` is a background worker responsible for executing the schedule provided by the `MarketScheduler`.
-
-Its only responsibilities are to:
-
-1. Obtain the next scheduled market event.
-2. Update the current market state.
-3. Wait until the event occurs.
-4. Publish the event through the `EventBus`.
-5. Repeat until the service is stopped.
-
-It serves as the bridge between market scheduling and the event-driven components of the trading engine.
-
----
-
-## Event System Integration
-
-### Role in Event-Driven Architecture
-
-The **MarketSessionManager** acts as a **publisher** in the event-driven architecture.
-
-It does not know which services are interested in market events. Its responsibility is only to publish market lifecycle events through the `EventBus`.
-
-### Published Events
-
-* `MARKET_OPEN`
-* `MARKET_CLOSE`
-
-### Integration Flow
+### Before market open (08:00)
 
 ```text
-MarketScheduler
-      │
-      ▼
-MarketSessionManager
-      │ Publish Event
-      ▼
-EventBus
-      │
-      ▼
-Interested Subscribers
+Current state: CLOSED
+Next event   : MARKET_OPEN at 09:15
+Action       : Wait
 ```
 
-At this stage, the document focuses on the publisher side of the architecture. Subscribers are introduced in later modules.
+### Market opens (09:15)
 
+```text
+Publish MARKET_OPEN
+State becomes OPEN
+```
+
+### During market hours (11:00)
+
+```text
+Current state: OPEN
+Next event   : MARKET_CLOSE at 15:30
+Action       : Wait
+```
+
+### Market closes (15:30)
+
+```text
+Publish MARKET_CLOSE
+State becomes CLOSED
+```
+
+---
+
+## Startup during market hours
+
+This feature was added to handle application startup while the market is already open.
+
+### Example
+
+* Application starts at **11:00 AM**
+* Scheduler reports:
+
+  * `market_state = OPEN`
+  * next event = `MARKET_CLOSE`
+
+### Behavior
+
+Immediately after startup:
+
+```text
+Publish MARKET_OPEN
+```
+
+Then the manager waits until market close and later publishes:
+
+```text
+MARKET_CLOSE
+```
+
+### Why this is important
+
+Without this bootstrap event, subscribers such as `SessionManager` would not create runtime sessions until the next trading day.
+
+---
+
+## Event publishing
+
+Published events:
+
+| Event          | Meaning                 |
+| -------------- | ----------------------- |
+| `MARKET_OPEN`  | Trading session started |
+| `MARKET_CLOSE` | Trading session ended   |
+
+Events are published without payload:
+
+```python
+SystemEvent(event_type=EventType.MARKET_OPEN)
+```
+
+---
+
+## Thread model
+
+* Runs in a dedicated daemon thread named `MarketSessionManager`.
+* Uses `threading.Event` for interruptible waiting.
+* `stop()` immediately interrupts any active wait.
+
+---
+
+## Public API
+
+### Start manager
+
+```python
+manager.start()
+```
+
+### Stop manager
+
+```python
+manager.stop()
+```
+
+### Read current state
+
+```python
+manager.market_state
+```
+
+Returns `MarketState.OPEN` or `MarketState.CLOSED`.
+
+---
+
+## Design principles
+
+### Single responsibility
+
+* **Scheduler** decides *when* market events occur.
+* **Manager** decides *when to publish* them.
+
+### Event-driven communication
+
+The manager never calls downstream services directly; it communicates only through `EventBus`.
+
+### Idempotent startup
+
+Bootstrap `MARKET_OPEN` is published only once per application startup.
+
+### Testability
+
+The scheduling loop is separated into `_process_one_iteration()` so unit tests can execute a single cycle deterministically.
+
+---
+
+## Typical integration
+
+```python
+event_bus = EventBus()
+scheduler = MarketScheduler()
+
+manager = MarketSessionManager(
+    scheduler=scheduler,
+    event_bus=event_bus
+)
+
+manager.start()
+```
+
+A subscriber can react to market open:
+
+```python
+event_bus.subscribe(
+    EventType.MARKET_OPEN,
+    session_manager._on_market_open
+)
+```
+
+---
+
+## Example timeline
+
+### Normal startup before market open
+
+```text
+08:00 start
+09:15 MARKET_OPEN
+15:30 MARKET_CLOSE
+```
+
+### Startup during market hours
+
+```text
+11:00 start
+11:00 MARKET_OPEN (bootstrap)
+15:30 MARKET_CLOSE
+```
+
+---
+
+## Testing
+
+The module is covered by unit tests for:
+
+* market open cycle
+* market close cycle
+* interruptible waiting
+* start/stop lifecycle
+* startup during market hours
+* market state transitions
+
+Run tests:
+
+```bash
+python -m pytest tests/test_market_sessions -v
+```
+
+---
+
+## Future enhancements
+
+Planned future capabilities:
+
+* exchange-specific sessions
+* pre-open and post-close support
+* observability metrics
+* structured logging
+* health endpoints
+* distributed leader election for HA deployments
+
+These features are intentionally excluded from the current implementation to keep the lifecycle manager focused and maintainable.
+
+---
+
+## Summary
+
+`MarketSessionManager` is a lightweight event-driven orchestrator that:
+
+* tracks market state,
+* waits for scheduled market events,
+* publishes lifecycle events,
+* supports startup during active trading sessions,
+* and remains isolated from business logic and trading execution concerns.
+
+This separation makes the market lifecycle predictable, testable, and easy to extend as the trading engine grows.
