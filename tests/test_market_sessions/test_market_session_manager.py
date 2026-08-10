@@ -17,12 +17,11 @@ class FakeOpenScheduler:
     def get_next_event(self, current_datetime: datetime):
 
         return NextMarketEvent(
-            event=EventType.MARKET_OPEN,
+            event=EventType.MARKET_CLOSE,
             event_time=current_datetime,
             sleep_seconds=0,
-            market_state=MarketState.WAITING
+            market_state=MarketState.OPEN
         )
-
 
 class FakeCloseScheduler:
 
@@ -65,7 +64,7 @@ def test_process_one_iteration_market_open():
     manager._process_one_iteration()
 
     # Assert
-    assert manager.market_state == MarketState.WAITING
+    assert manager.market_state == MarketState.OPEN
     assert len(received_events) == 1
     assert received_events[0].event_type == EventType.MARKET_OPEN
 

@@ -2,6 +2,7 @@ from datetime import datetime
 from threading import Event, Thread
 
 from event_system.event import Event as SystemEvent
+from event_system.event_type import EventType
 from event_system.event_bus import EventBus
 
 from market_session.market_config import IST
@@ -12,14 +13,20 @@ from market_session.models import NextMarketEvent
 
 class MarketSessionManager:
     """
-    Controls the lifecycle of the market session.
+    Control the market session lifecycle.
 
-    Responsibilities:
-        - Ask MarketScheduler for the next market event.
-        - Update the current market state.
-        - Wait until the event time.
-        - Publish the event through EventBus.
-        - Repeat until stopped.
+    Responsibilities
+    ----------------
+    - Ask MarketScheduler for the next market event.
+    - Update the current market state.
+    - Wait until the scheduled event time.
+    - Publish the market event through EventBus.
+    - Repeat until stop() is called.
+
+    Important
+    ---------
+    Waiting is an internal behavior of this manager, not a market state.
+    The market can only be OPEN or CLOSED.
     """
 
     def __init__(
@@ -27,6 +34,17 @@ class MarketSessionManager:
         scheduler: MarketScheduler,
         event_bus: EventBus
     ) -> None:
+        """
+        Initialize MarketSessionManager.
+
+        Parameters
+        ----------
+        scheduler:
+            Component responsible for market calendar and timing logic.
+
+        event_bus:
+            Shared event bus used to publish market lifecycle events.
+        """
 
         self._scheduler = scheduler
         self._event_bus = event_bus
@@ -34,17 +52,25 @@ class MarketSessionManager:
         self._running = False
         self._thread: Thread | None = None
 
-        # Used for interruptible waiting
+        # Used to interrupt waiting immediately when stop() is called.
         self._stop_event = Event()
 
-        # Current market state
-        self._current_market_state = MarketState.WAITING
+        # Initial market state before the first scheduler evaluation.
+        self._current_market_state = MarketState.CLOSED
+
+        # Prevent duplicate startup MARKET_OPEN publication.
+        self._startup_bootstrap_done = False
 
     # ---------------------------------------------------------
     # Public API
     # ---------------------------------------------------------
 
     def start(self) -> None:
+        """
+        Start the market session loop in a background thread.
+
+        Calling start() multiple times has no effect.
+        """
 
         if self._running:
             return
@@ -61,23 +87,32 @@ class MarketSessionManager:
         self._thread.start()
 
     def stop(self) -> None:
+        """
+        Stop the market session loop gracefully.
+
+        If the manager is currently waiting, the wait is interrupted
+        immediately and the background thread exits.
+        """
 
         if not self._running:
             return
 
         self._running = False
 
-        # Interrupt waiting immediately
+        # Interrupt any active wait.
         self._stop_event.set()
 
         if self._thread is not None:
             self._thread.join()
 
     # ---------------------------------------------------------
-    # Private Methods
+    # Internal loop
     # ---------------------------------------------------------
 
     def _run(self) -> None:
+        """
+        Continuously process market scheduling cycles.
+        """
 
         while self._running:
 
@@ -86,19 +121,20 @@ class MarketSessionManager:
 
     def _process_one_iteration(self) -> bool:
         """
-        Execute one scheduling cycle.
-
-        This method is separated from _run() to simplify unit testing.
+        Execute one scheduler cycle.
         """
 
         next_event = self._scheduler.get_next_event(
             datetime.now(IST)
         )
 
-        # Scheduler decides the current market state
+        # Scheduler is the single source of truth for market state.
         self._current_market_state = next_event.market_state
 
-        # Number of seconds to wait
+        # Handle application startup during market hours.
+        self._bootstrap_if_market_already_open(next_event)
+
+        # Wait until the scheduled event time.
         if not self._wait(next_event.sleep_seconds):
             return False
 
@@ -110,38 +146,94 @@ class MarketSessionManager:
         """
         Wait until timeout expires or stop() is called.
 
-        Returns:
-            True  -> timeout completed normally.
-            False -> stop requested.
+        This method represents the manager's waiting behavior.
+        It does not change the market state.
+
+        Parameters
+        ----------
+        seconds:
+            Number of seconds to wait.
+
+        Returns
+        -------
+        True
+            Timeout completed normally.
+
+        False
+            Waiting was interrupted by stop().
         """
 
         interrupted = self._stop_event.wait(timeout=seconds)
 
         return not interrupted
 
+
+    def _bootstrap_if_market_already_open(
+        self,
+        next_event: NextMarketEvent
+    ) -> None:
+        """
+        Publish MARKET_OPEN immediately when the application starts
+        during market hours.
+
+        This allows SessionManager and other subscribers to build
+        runtime state without waiting for the next trading day.
+        """
+
+        if self._startup_bootstrap_done:
+            return
+
+        if next_event.market_state != MarketState.OPEN:
+            self._startup_bootstrap_done = True
+            return
+
+        bootstrap_event = SystemEvent(
+            event_type=EventType.MARKET_OPEN
+        )
+
+        self._event_bus.publish(bootstrap_event)
+
+        self._startup_bootstrap_done = True
+
+
+    # ---------------------------------------------------------
+    # Event publishing
+    # ---------------------------------------------------------
+
     def _publish(
         self,
         next_event: NextMarketEvent
     ) -> None:
         """
-        Publish the scheduled market event.
+        Publish the scheduled market lifecycle event.
 
-        NOTE:
-        MarketSessionManager DOES NOT modify market state here.
-        MarketScheduler is the single source of truth for MarketState.
+        Examples
+        --------
+        - MARKET_OPEN
+        - MARKET_CLOSE
+
+        Subscribers receive the event through EventBus.
         """
 
         event = SystemEvent(
-            event_type=next_event.event,
-            payload=next_event
+            event_type=next_event.event
         )
 
         self._event_bus.publish(event)
 
     # ---------------------------------------------------------
-    # Properties
+    # Read-only state
     # ---------------------------------------------------------
 
     @property
     def market_state(self) -> MarketState:
+        """
+        Return the current market state.
+
+        Returns
+        -------
+        MarketState
+            OPEN or CLOSED.
+        """
+
         return self._current_market_state
