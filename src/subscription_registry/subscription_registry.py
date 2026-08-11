@@ -44,6 +44,29 @@ class SubscriptionRegistry:
             self._user_to_symbols[session.user_id].add(symbol)
             self._symbol_counts[symbol] += 1
 
+            """
+            Example:
+            self._symbol_to_users["NIFTY"].add(101)
+            self._user_to_symbols[101].add("NIFTY")
+            self._symbol_counts["NIFTY"] += 1
+
+            _symbol_to_users = {
+                "NIFTY": {101},
+                "BANKNIFTY": {101}
+            }
+
+            _user_to_symbols = {
+                101: {"NIFTY", "BANKNIFTY"}
+            }
+
+            _symbol_counts = {
+                "NIFTY": 1,
+                "BANKNIFTY": 1
+            }
+            """
+
+
+
     def remove_session(
         self,
         user_id: int
