@@ -124,6 +124,22 @@ class MarketSessionManager:
         Execute one scheduler cycle.
         """
 
+        '''
+        dataformat of get_next_event() is as follows:
+
+                NextMarketEvent(
+                    event=EventType.MARKET_CLOSE,
+                    event_time=2026-08-11 15:30,
+                    sleep_seconds=16200,
+                    market_state=MarketState.OPEN
+                )
+
+                Current state : OPEN
+                Next action   : MARKET_CLOSE
+                Action time   : 15:30
+                Wait duration : 16200 sec
+        '''
+
         next_event = self._scheduler.get_next_event(
             datetime.now(IST)
         )
