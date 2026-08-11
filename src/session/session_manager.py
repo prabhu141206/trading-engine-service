@@ -17,9 +17,30 @@ class SessionManager:
         self._sessions: dict[int, UserSession] = {}
 
     # make a fake user loader
-    def _load_active_users(self) -> list[int]:
+    def _load_active_users(self) -> list[UserSession]:
+        """
+        Temporary in-memory data source.
 
-        return [101, 202, 303]
+        Future implementation:
+            - Query active users from database.
+            - Query active symbol subscriptions for each user.
+            - Build UserSession objects from persistent data.
+        """
+
+        return [
+            UserSession(
+                user_id=101,
+                subscribed_symbols={"NIFTY", "BANKNIFTY"}
+            ),
+            UserSession(
+                user_id=202,
+                subscribed_symbols={"NIFTY"}
+            ),
+            UserSession(
+                user_id=303,
+                subscribed_symbols={"FINNIFTY"}
+            ),
+        ]
 
 
     def _create_session(
