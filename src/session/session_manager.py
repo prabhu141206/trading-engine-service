@@ -3,20 +3,39 @@ from event_system.event_bus import EventBus
 from event_system.event_type import EventType
 
 from session.user_session import UserSession
+from subscription_registry.subscription_registry import SubscriptionRegistry
+
 
 class SessionManager:
+    """
+    Manage runtime user sessions.
+
+    Responsibilities
+    ----------------
+    - Listen to market lifecycle events.
+    - Load active users when market opens.
+    - Create in-memory runtime sessions.
+    - Populate SubscriptionRegistry.
+    - Clear sessions when market closes.
+    """
 
     def __init__(
         self,
         event_bus: EventBus,
+        subscription_registry: SubscriptionRegistry,
     ) -> None:
 
+        # Dependency injection
         self._event_bus = event_bus
+        self._subscription_registry = subscription_registry
 
-        # Active user sessions
+        # Active runtime sessions.
         self._sessions: dict[int, UserSession] = {}
 
-    # make a fake user loader
+    # ---------------------------------------------------------
+    # Temporary data source
+    # ---------------------------------------------------------
+
     def _load_active_users(self) -> list[UserSession]:
         """
         Temporary in-memory data source.
@@ -42,22 +61,54 @@ class SessionManager:
             ),
         ]
 
+    # ---------------------------------------------------------
+    # Session lifecycle
+    # ---------------------------------------------------------
 
-    def _create_session(
-        self,
-        user_id: int
-    ) -> None:
+    def _create_user_sessions(self) -> None:
+        """
+        Create runtime sessions and register subscriptions.
+        """
 
-        session = UserSession(
-            user_id=user_id
-        )
+        active_sessions = self._load_active_users()
 
-        self._sessions[user_id] = session
+        for session in active_sessions:
 
+            """
+            Example:
+            self._sessions[101] = session
 
+            {
+                101: UserSession(
+                    user_id=101,
+                    subscribed_symbols={"NIFTY", "BANKNIFTY"}
+                )
+            }
+            """
+            # Store runtime session.
+            self._sessions[session.user_id] = session
+
+            # Register symbol subscriptions.
+            self._subscription_registry.add_session(session)
+
+    def _clear_user_sessions(self) -> None:
+        """
+        Remove all runtime sessions and subscription mappings.
+        """
+
+        for session in self._sessions.values():
+            self._subscription_registry.remove_session(session.user_id)
+
+        self._sessions.clear()
+
+    # ---------------------------------------------------------
+    # Event registration
+    # ---------------------------------------------------------
 
     def start(self) -> None:
-
+        """
+        Register market lifecycle event handlers.
+        """
 
         self._event_bus.subscribe(
             EventType.MARKET_OPEN,
@@ -69,24 +120,26 @@ class SessionManager:
             self._on_market_close
         )
 
-      
+    # ---------------------------------------------------------
+    # Event handlers
+    # ---------------------------------------------------------
 
-
-    # Event handlers (event publish by the event bus to this methods)
     def _on_market_open(
         self,
         event: Event
     ) -> None:
+        """
+        Handle MARKET_OPEN event.
+        """
 
-        user_ids = self._load_active_users()
-
-        for user_id in user_ids:
-            self._create_session(user_id)
-
+        self._create_user_sessions()
 
     def _on_market_close(
         self,
         event: Event
     ) -> None:
+        """
+        Handle MARKET_CLOSE event.
+        """
 
-        self._sessions.clear()
+        self._clear_user_sessions()
