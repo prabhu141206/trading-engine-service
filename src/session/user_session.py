@@ -1,8 +1,7 @@
+from dataclasses import dataclass
+
+
+@dataclass
 class UserSession:
-
-    def __init__(
-        self,
-        user_id: int
-    ) -> None:
-
-        self.user_id = user_id
+    user_id: int
+    subscribed_symbols: set[str]
