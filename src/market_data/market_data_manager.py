@@ -2,111 +2,136 @@ from event_system.event import Event
 from event_system.event_bus import EventBus
 from event_system.event_type import EventType
 
-from market_data.tick import Tick
-from market_data.websocket_client import FakeWebSocketClient
+from market_data.models import Tick
+from market_data.websocket_client import WebSocketClient
 from subscription_registry.subscription_registry import SubscriptionRegistry
 
 
 class MarketDataManager:
     """
-    Shared market data manager.
+    Manages broker websocket connection and publishes live ticks.
 
-    Responsibilities
-    ----------------
-    - Maintain one websocket connection.
-    - Synchronize symbol subscriptions.
-    - Receive ticks from websocket.
-    - Publish ticks through EventBus.
+    Responsibilities:
+        - Connect/disconnect websocket.
+        - Subscribe required symbols.
+        - Publish TICK_RECEIVED events.
     """
 
     def __init__(
         self,
         event_bus: EventBus,
         subscription_registry: SubscriptionRegistry,
-        websocket_client: FakeWebSocketClient,
+        websocket_client: WebSocketClient
     ) -> None:
 
+
+        # ---------------------------------------------------------
+        # Dependencies 
+        # ---------------------------------------------------------
         self._event_bus = event_bus
         self._subscription_registry = subscription_registry
         self._websocket_client = websocket_client
 
-        # Currently active websocket subscriptions.
-        self._active_symbols: set[str] = set()
-
-        # Register tick callback.
-        self._websocket_client.set_tick_handler(self.on_tick)
+        # ---------------------------------------------------------
+        # Internal State
+        # ---------------------------------------------------------
+        self._connected = False
+        self._subscribed_symbols: set[str] = set()
 
     # ---------------------------------------------------------
-    # Lifecycle
+    # Public API
     # ---------------------------------------------------------
 
     def start(self) -> None:
         """
-        Connect websocket and synchronize subscriptions.
+        Register lifecycle event handlers.
         """
 
-        self._websocket_client.connect()
-        self.sync_subscriptions()
+        self._event_bus.subscribe(
+            EventType.SESSIONS_READY,
+            self._on_sessions_ready
+        )
 
-    def stop(self) -> None:
+        self._event_bus.subscribe(
+            EventType.MARKET_CLOSE,
+            self._on_market_close
+        )
+
+    # ---------------------------------------------------------
+    # Event Handlers
+    # ---------------------------------------------------------
+
+    def _on_sessions_ready(self, event: Event) -> None:
         """
-        Disconnect websocket.
+        Called after SessionManager has populated SubscriptionRegistry.
         """
+
+        self._connect()
+        self._sync_subscriptions()
+
+    def _on_market_close(self, event: Event) -> None:
+        """
+        Disconnect websocket and clear runtime subscription state.
+        """
+
+        if not self._connected:
+            return
+
+        if self._subscribed_symbols:
+            self._websocket_client.unsubscribe(
+                self._subscribed_symbols
+            )
 
         self._websocket_client.disconnect()
-        self._active_symbols.clear()
+
+        self._connected = False
+        self._subscribed_symbols.clear()
 
     # ---------------------------------------------------------
-    # Subscription management
+    # Connection Management
     # ---------------------------------------------------------
 
-    def sync_subscriptions(self) -> None:
+    def _connect(self) -> None:
         """
-        Synchronize websocket subscriptions with SubscriptionRegistry.
+        Establish websocket connection if not already connected.
         """
 
-        required_symbols = self._subscription_registry.get_all_symbols()
+        if self._connected:
+            return
 
-        symbols_to_subscribe = (
-            required_symbols - self._active_symbols
+        self._websocket_client.set_tick_handler(self._on_tick)
+        self._websocket_client.connect()
+
+        self._connected = True
+
+    def _sync_subscriptions(self) -> None:
+        """
+        Synchronize broker subscriptions with SubscriptionRegistry.
+        """
+
+        required_symbols = (
+            self._subscription_registry.get_all_symbols()
         )
 
-        symbols_to_unsubscribe = (
-            self._active_symbols - required_symbols
-        )
+        to_add = required_symbols - self._subscribed_symbols
 
-        if symbols_to_subscribe:
-            self._websocket_client.subscribe(
-                symbols_to_subscribe
-            )
+        if to_add:
+            self._websocket_client.subscribe(to_add)
 
-        if symbols_to_unsubscribe:
-            self._websocket_client.unsubscribe(
-                symbols_to_unsubscribe
-            )
-
-        self._active_symbols = set(required_symbols)
+        self._subscribed_symbols.update(to_add)
 
     # ---------------------------------------------------------
-    # Tick handling
+    # Tick Processing
     # ---------------------------------------------------------
 
-    def on_tick(self, tick: Tick) -> None:
+    def _on_tick(self, tick: Tick) -> None:
         """
         Publish incoming tick to EventBus.
         """
 
-        event = Event(
-            event_type=EventType.TICK_RECEIVED,
-            payload=tick
+        self._event_bus.publish(
+            Event(
+                event_type=EventType.TICK_RECEIVED,
+                payload=tick
+            )
         )
-
-        self._event_bus.publish(event)
-
-    # ---------------------------------------------------------
-    # Testing helpers
-    # ---------------------------------------------------------
-
-    @property
-    def active_symbols(self) -> set[str]:
-        return set(self._active_symbols)
