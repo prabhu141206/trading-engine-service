@@ -4,8 +4,7 @@ from event_system.event_type import EventType
 
 from market_data.models import Tick
 from market_data.websocket_client import WebSocketClient
-from subscription_registry.subscription_registry import SubscriptionRegistry
-
+from registry.subscription_registry import SubscriptionRegistry
 
 class MarketDataManager:
     """
@@ -110,7 +109,7 @@ class MarketDataManager:
         """
 
         required_symbols = (
-            self._subscription_registry.get_all_symbols()
+            self._subscription_registry.get_symbols()
         )
 
         to_add = required_symbols - self._subscribed_symbols

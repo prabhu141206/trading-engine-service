@@ -2,9 +2,10 @@ from event_system.event import Event
 from event_system.event_bus import EventBus
 from event_system.event_type import EventType
 
+from registry.strategy_models import StrategyGroup
 from session.user_session import UserSession
-from subscription_registry.subscription_registry import SubscriptionRegistry
-
+from registry.subscription_registry import SubscriptionRegistry
+from registry.strategy_registry import StrategyRegistry
 
 class SessionManager:
     """
@@ -16,6 +17,7 @@ class SessionManager:
     - Load active users when market opens.
     - Create in-memory runtime sessions.
     - Populate SubscriptionRegistry.
+    - Populate StrategyRegistry.
     - Clear sessions when market closes.
     """
 
@@ -23,11 +25,13 @@ class SessionManager:
         self,
         event_bus: EventBus,
         subscription_registry: SubscriptionRegistry,
+        strategy_registry: StrategyRegistry,
     ) -> None:
 
         # Dependency injection
         self._event_bus = event_bus
         self._subscription_registry = subscription_registry
+        self._strategy_registry = strategy_registry
 
         # Active runtime sessions.
         self._sessions: dict[int, UserSession] = {}
@@ -38,26 +42,60 @@ class SessionManager:
 
     def _load_active_users(self) -> list[UserSession]:
         """
-        Temporary in-memory data source.
+        Temporary in-memory user configuration.
 
         Future implementation:
             - Query active users from database.
-            - Query active symbol subscriptions for each user.
-            - Build UserSession objects from persistent data.
+            - Query active symbol subscriptions.
+            - Query selected strategies.
+            - Build UserSession objects.
         """
+
+        ema_nifty = StrategyGroup(
+            strategy_type="EMA",
+            symbol="NIFTY",
+            timeframe="5m",
+            parameters=(("period", 10),),
+        )
+
+        ema_banknifty = StrategyGroup(
+            strategy_type="EMA",
+            symbol="BANKNIFTY",
+            timeframe="5m",
+            parameters=(("period", 10),),
+        )
+
+        ema_finnifty = StrategyGroup(
+            strategy_type="EMA",
+            symbol="FINNIFTY",
+            timeframe="5m",
+            parameters=(("period", 10),),
+        )
 
         return [
             UserSession(
                 user_id=101,
-                subscribed_symbols={"NIFTY", "BANKNIFTY"}
+                subscribed_symbols={"NIFTY", "BANKNIFTY"},
+                strategies={
+                    ema_nifty,
+                    ema_banknifty,
+                },
             ),
+
             UserSession(
                 user_id=202,
-                subscribed_symbols={"NIFTY"}
+                subscribed_symbols={"NIFTY"},
+                strategies={
+                    ema_nifty,
+                },
             ),
+
             UserSession(
                 user_id=303,
-                subscribed_symbols={"FINNIFTY"}
+                subscribed_symbols={"FINNIFTY"},
+                strategies={
+                    ema_finnifty,
+                },
             ),
         ]
 
@@ -67,39 +105,35 @@ class SessionManager:
 
     def _create_user_sessions(self) -> None:
         """
-        Create runtime sessions and register subscriptions.
+        Create runtime sessions and register their
+        market-data and strategy requirements.
         """
 
         active_sessions = self._load_active_users()
 
         for session in active_sessions:
 
-            """
-            Example:
-            self._sessions[101] = session
-
-            {
-                101: UserSession(
-                    user_id=101,
-                    subscribed_symbols={"NIFTY", "BANKNIFTY"}
-                )
-            }
-            """
-            # Store runtime session.
+            # Store runtime user session.
             self._sessions[session.user_id] = session
 
-            # Register symbol subscriptions.
-            self._subscription_registry.add_session(session)
+            # Register required market-data symbols.
+            for symbol in session.subscribed_symbols:
+                self._subscription_registry.add_symbol(symbol)
+
+            # Register unique strategy groups.
+            for strategy in session.strategies:
+                self._strategy_registry.add_strategy(strategy)
+
 
     def _clear_user_sessions(self) -> None:
         """
-        Remove all runtime sessions and subscription mappings.
+        Remove all runtime sessions and registry state.
         """
 
-        for session in self._sessions.values():
-            self._subscription_registry.remove_session(session.user_id)
-
         self._sessions.clear()
+
+        self._subscription_registry.clear()
+        self._strategy_registry.clear()
 
     # ---------------------------------------------------------
     # Event registration
