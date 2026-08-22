@@ -1,87 +1,115 @@
 from event_system.event import Event
 from event_system.event_bus import EventBus
 from event_system.event_type import EventType
-from src.session.session_manager import SessionManager
+from session.session_manager import SessionManager
+from registry.subscription_registry import SubscriptionRegistry
+from registry.strategy_registry import StrategyRegistry
 
 
 def test_subscribe_market_open():
-
-    # Arrange
     event_bus = EventBus()
+    subscription_registry = SubscriptionRegistry()
+    strategy_registry = StrategyRegistry()
 
     manager = SessionManager(
-        event_bus=event_bus
+        event_bus=event_bus,
+        subscription_registry=subscription_registry,
+        strategy_registry=strategy_registry,
     )
 
-    # Act
     manager.start()
 
-    # Assert
     assert len(
         event_bus._subscribers[EventType.MARKET_OPEN]
     ) == 1
 
-
-
-
 def test_subscribe_market_close():
-
-    # Arrange
     event_bus = EventBus()
+    subscription_registry = SubscriptionRegistry()
+    strategy_registry = StrategyRegistry()
 
     manager = SessionManager(
-        event_bus=event_bus
+        event_bus=event_bus,
+        subscription_registry=subscription_registry,
+        strategy_registry=strategy_registry,
     )
 
-    # Act
     manager.start()
 
-    # Assert
     assert len(
         event_bus._subscribers[EventType.MARKET_CLOSE]
     ) == 1
 
 
-def test_create_user_sessions_on_market_open():
+def test_market_open_populates_subscription_registry():
 
     # Arrange
     event_bus = EventBus()
+    subscription_registry = SubscriptionRegistry()
+    strategy_registry = StrategyRegistry()
 
     manager = SessionManager(
-        event_bus=event_bus
+        event_bus=event_bus,
+        subscription_registry=subscription_registry,
+        strategy_registry=strategy_registry,
     )
 
     manager.start()
-
-    event = Event(
-        event_type=EventType.MARKET_OPEN,
-        payload=None
-    )
 
     # Act
-    event_bus.publish(event)
+    event_bus.publish(
+        Event(
+            event_type=EventType.MARKET_OPEN,
+            payload=None,
+        )
+    )
 
     # Assert
-    assert len(manager._sessions) == 3
+    assert subscription_registry.get_symbols() == {
+        "NIFTY",
+        "BANKNIFTY",
+        "FINNIFTY",
+    }
 
-    assert 101 in manager._sessions
-    assert 202 in manager._sessions
-    assert 303 in manager._sessions
 
+def test_market_open_populates_strategy_registry():
 
-def test_remove_user_sessions_on_market_close():
-
+    # Arrange
     event_bus = EventBus()
+    subscription_registry = SubscriptionRegistry()
+    strategy_registry = StrategyRegistry()
 
-    manager = SessionManager(event_bus)
+    manager = SessionManager(
+        event_bus=event_bus,
+        subscription_registry=subscription_registry,
+        strategy_registry=strategy_registry,
+    )
+
     manager.start()
 
-    # Open market first
-    event_bus.publish(Event(EventType.MARKET_OPEN, None))
+    # Act
+    event_bus.publish(
+        Event(
+            event_type=EventType.MARKET_OPEN,
+            payload=None,
+        )
+    )
 
-    assert len(manager._sessions) == 3
+    # Assert
+    strategies = strategy_registry.get_strategies()
 
-    # Close market
-    event_bus.publish(Event(EventType.MARKET_CLOSE, None))
+    assert len(strategies) == 3
 
-    assert len(manager._sessions) == 0
+    assert {
+        (
+            strategy.strategy_type,
+            strategy.symbol,
+            strategy.timeframe,
+            strategy.parameters,
+        )
+        for strategy in strategies
+    } == {
+        ("EMA", "NIFTY", "5m", (("period", 10),)),
+        ("EMA", "BANKNIFTY", "5m", (("period", 10),)),
+        ("EMA", "FINNIFTY", "5m", (("period", 10),)),
+    }

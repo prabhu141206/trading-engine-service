@@ -30,8 +30,8 @@ def test_during_market_hours():
 
     event = scheduler.get_next_event(current)
 
-    assert event.event == EventType.MARKET_OPEN
-    assert event.event_time == datetime(2026, 8, 6, 9, 15)
+    assert event.event == EventType.MARKET_CLOSE
+    assert event.event_time == datetime(2026, 8, 5, 15, 30)
 
 #Test 3 - After Market Close
 def test_after_market_close():

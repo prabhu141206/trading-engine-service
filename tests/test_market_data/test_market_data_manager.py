@@ -5,7 +5,7 @@ from event_system.event_bus import EventBus
 from event_system.event_type import EventType
 from market_data.market_data_manager import MarketDataManager
 from market_data.models import Tick
-from subscription_registry.subscription_registry import SubscriptionRegistry
+from registry.subscription_registry import SubscriptionRegistry
 
 
 class FakeWebSocketClient:
@@ -51,15 +51,23 @@ def test_publish_tick_event():
     def handler(event):
         received_ticks.append(event.payload)
 
-    event_bus.subscribe(EventType.TICK_RECEIVED, handler)
+    event_bus.subscribe(
+        EventType.TICK_RECEIVED,
+        handler
+    )
+
+    # Register the symbol in the new registry
+    registry.add_symbol("NIFTY")
 
     manager.start()
 
-    registry._symbol_to_users["NIFTY"] = {101}
-
+    # Notify MarketDataManager that registry is ready
     event_bus.publish(
         Event(EventType.SESSIONS_READY, None)
     )
+
+    # Verify websocket subscription
+    assert websocket.subscribed == {"NIFTY"}
 
     tick = Tick(
         symbol="NIFTY",
