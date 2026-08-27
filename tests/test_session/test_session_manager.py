@@ -3,6 +3,7 @@ from event_system.event_bus import EventBus
 from event_system.event_type import EventType
 from session.session_manager import SessionManager
 from registry.subscription_registry import SubscriptionRegistry
+#from registry.strategy_registry import StrategyRegistry
 from registry.strategy_registry import StrategyRegistry
 
 
@@ -96,7 +97,7 @@ def test_market_open_populates_strategy_registry():
     )
 
     # Assert
-    strategies = strategy_registry.get_strategies()
+    strategies = strategy_registry.get_groups()
 
     assert len(strategies) == 3
 

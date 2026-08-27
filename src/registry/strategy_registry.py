@@ -1,5 +1,4 @@
-from .strategy_models import StrategyGroup
-
+from strategy.strategy_models import StrategyGroup
 
 class StrategyRegistry:
     """
@@ -16,15 +15,15 @@ class StrategyRegistry:
     def __init__(self) -> None:
         self._groups: set[StrategyGroup] = set()
 
-    def add_strategy(self, group: StrategyGroup) -> None:
+    def add_group(self, group: StrategyGroup) -> None:
         """Register a strategy group."""
         self._groups.add(group)
 
-    def remove_strategy(self, group: StrategyGroup) -> None:
+    def remove_group(self, group: StrategyGroup) -> None:
         """Remove a strategy group."""
         self._groups.discard(group)
 
-    def get_strategies(self) -> set[StrategyGroup]:
+    def get_groups(self) -> set[StrategyGroup]:
         """Return a copy of all registered strategy groups."""
         return self._groups.copy()
 

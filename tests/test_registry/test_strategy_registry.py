@@ -1,4 +1,6 @@
-from registry.strategy_models import StrategyGroup
+
+
+from strategy.strategy_models import StrategyGroup
 from registry.strategy_registry import StrategyRegistry
 
 
@@ -12,9 +14,9 @@ def test_add_strategy():
         parameters=(("period", 10),)
     )
 
-    registry.add_strategy(group)
+    registry.add_group(group)
 
-    assert registry.get_strategies() == {group}
+    assert registry.get_groups() == {group}
 
 
 def test_add_multiple_strategies():
@@ -34,10 +36,10 @@ def test_add_multiple_strategies():
         parameters=(("period", 10),)
     )
 
-    registry.add_strategy(ema_nifty)
-    registry.add_strategy(ema_reliance)
+    registry.add_group(ema_nifty)
+    registry.add_group(ema_reliance)
 
-    assert registry.get_strategies() == {
+    assert registry.get_groups() == {
         ema_nifty,
         ema_reliance,
     }
@@ -60,10 +62,10 @@ def test_duplicate_strategy_is_registered_only_once():
         parameters=(("period", 10),)
     )
 
-    registry.add_strategy(group1)
-    registry.add_strategy(group2)
+    registry.add_group(group1)
+    registry.add_group(group2)
 
-    assert len(registry.get_strategies()) == 1
+    assert len(registry.get_groups()) == 1
 
 
 def test_different_parameters_create_different_groups():
@@ -83,10 +85,10 @@ def test_different_parameters_create_different_groups():
         parameters=(("period", 20),)
     )
 
-    registry.add_strategy(ema_10)
-    registry.add_strategy(ema_20)
+    registry.add_group(ema_10)
+    registry.add_group(ema_20)
 
-    assert len(registry.get_strategies()) == 2
+    assert len(registry.get_groups()) == 2
 
 
 def test_remove_strategy():
@@ -99,10 +101,10 @@ def test_remove_strategy():
         parameters=(("period", 10),)
     )
 
-    registry.add_strategy(group)
-    registry.remove_strategy(group)
+    registry.add_group(group)
+    registry.remove_group(group)
 
-    assert registry.get_strategies() == set()
+    assert registry.get_groups() == set()
 
 
 def test_remove_non_existing_strategy():
@@ -115,9 +117,9 @@ def test_remove_non_existing_strategy():
         parameters=(("period", 10),)
     )
 
-    registry.remove_strategy(group)
+    registry.remove_group(group)
 
-    assert registry.get_strategies() == set()
+    assert registry.get_groups() == set()
 
 
 def test_get_strategies_returns_copy():
@@ -130,9 +132,9 @@ def test_get_strategies_returns_copy():
         parameters=(("period", 10),)
     )
 
-    registry.add_strategy(group)
+    registry.add_group(group)
 
-    strategies = registry.get_strategies()
-    strategies.clear()
+    groups = registry.get_groups()
+    groups.clear()
 
-    assert registry.get_strategies() == {group}
+    assert registry.get_groups() == {group}

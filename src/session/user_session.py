@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from registry.strategy_models import StrategyGroup
+from strategy.strategy_models import StrategyGroup
 
 @dataclass
 class UserSession:

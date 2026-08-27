@@ -2,7 +2,8 @@ from event_system.event import Event
 from event_system.event_bus import EventBus
 from event_system.event_type import EventType
 
-from registry.strategy_models import StrategyGroup
+from strategy.strategy_models import StrategyGroup
+
 from session.user_session import UserSession
 from registry.subscription_registry import SubscriptionRegistry
 from registry.strategy_registry import StrategyRegistry
@@ -122,7 +123,7 @@ class SessionManager:
 
             # Register unique strategy groups.
             for strategy in session.strategies:
-                self._strategy_registry.add_strategy(strategy)
+                self._strategy_registry.add_group(strategy)
 
 
     def _clear_user_sessions(self) -> None:
