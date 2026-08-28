@@ -7,6 +7,8 @@ from strategy.strategy_models import StrategyGroup
 from session.user_session import UserSession
 from registry.subscription_registry import SubscriptionRegistry
 from registry.strategy_registry import StrategyRegistry
+from registry.strategy_user_registry import StrategyUserRegistry
+
 
 class SessionManager:
     """
@@ -27,12 +29,14 @@ class SessionManager:
         event_bus: EventBus,
         subscription_registry: SubscriptionRegistry,
         strategy_registry: StrategyRegistry,
+        strategy_user_registry: StrategyUserRegistry,
     ) -> None:
 
         # Dependency injection
         self._event_bus = event_bus
         self._subscription_registry = subscription_registry
         self._strategy_registry = strategy_registry
+        self._strategy_user_registry = strategy_user_registry
 
         # Active runtime sessions.
         self._sessions: dict[int, UserSession] = {}
@@ -125,16 +129,21 @@ class SessionManager:
             for strategy in session.strategies:
                 self._strategy_registry.add_group(strategy)
 
+                self._strategy_user_registry.subscribe(
+                    user_id=session.user_id,
+                    group=strategy,
+                )
+
 
     def _clear_user_sessions(self) -> None:
         """
         Remove all runtime sessions and registry state.
         """
-
         self._sessions.clear()
 
         self._subscription_registry.clear()
         self._strategy_registry.clear()
+        self._strategy_user_registry.clear()
 
     # ---------------------------------------------------------
     # Event registration

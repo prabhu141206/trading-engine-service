@@ -51,19 +51,20 @@ def create_signal(
 
 def create_distributor():
     """
-    Create a SignalDistributor with real subscription registry
-    and mocked delivery mechanism.
+    Create a SignalDistributor with a mocked EventBus,
+    real StrategyUserRegistry, and mocked delivery mechanism.
     """
+    event_bus = Mock()
     registry = StrategyUserRegistry()
     delivery = Mock()
 
     distributor = SignalDistributor(
+        event_bus=event_bus,
         subscription_registry=registry,
         delivery=delivery,
     )
 
     return distributor, registry, delivery
-
 
 def test_signal_is_delivered_to_one_subscribed_user():
     """
