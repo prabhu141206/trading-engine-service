@@ -7,22 +7,25 @@ from registry.strategy_registry import StrategyRegistry
 from registry.strategy_user_registry import StrategyUserRegistry
 from session.session_manager import SessionManager
 from strategy.strategy_models import StrategyGroup
+from db.user_session_repository import UserSessionRepository
 
 
 def create_manager():
     """
-    Create a SessionManager with all required registries.
+    Create a SessionManager with all required dependencies.
     """
     event_bus = EventBus()
     subscription_registry = SubscriptionRegistry()
     strategy_registry = StrategyRegistry()
     strategy_user_registry = StrategyUserRegistry()
+    user_session_repository = UserSessionRepository()
 
     manager = SessionManager(
         event_bus=event_bus,
         subscription_registry=subscription_registry,
         strategy_registry=strategy_registry,
         strategy_user_registry=strategy_user_registry,
+        user_session_repository=user_session_repository,
     )
 
     return (
