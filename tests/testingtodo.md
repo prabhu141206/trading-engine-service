@@ -4,12 +4,12 @@ Absolutely. Here is the **Phase 2 TODO checklist** we should follow. We can tick
 
 ## A. Candle Pipeline
 
-* [ ] **1. Test Tick → CandleBuilder**
+* [✅] **1. Test Tick → CandleBuilder**
 
-  * Tick reaches CandleBuilder
-  * Correct 5-minute bucket
-  * First tick creates candle
-  * Subsequent ticks update OHLC
+  * Tick reaches CandleBuilder ✅
+  * Correct 5-minute bucket  ✅
+  * First tick creates candle ✅
+  * Subsequent ticks update OHLC ✅
 
 * [ ] **2. Test candle interval transition**
 
