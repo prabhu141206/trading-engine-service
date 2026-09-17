@@ -4,6 +4,8 @@ from event_system.event_type import EventType
 
 from candle.candle_models import CandleBatch
 from indicators.indicator_models import IndicatorBatch
+from strategy.strategy_factory import StrategyFactory
+from registry.strategy_registry import StrategyRegistry
 
 from .strategy_correlator import StrategyCorrelator
 from .strategy_dispatcher import StrategyDispatcher
@@ -32,10 +34,14 @@ class StrategyEngine:
         event_bus: EventBus,
         correlator: StrategyCorrelator,
         dispatcher: StrategyDispatcher,
+        strategy_registry: StrategyRegistry,
+        strategy_factory: StrategyFactory,
     ) -> None:
         self._event_bus = event_bus
         self._correlator = correlator
         self._dispatcher = dispatcher
+        self._strategy_registry = strategy_registry
+        self._strategy_factory = strategy_factory
 
     # ---------------------------------------------------------
     # Lifecycle
@@ -45,6 +51,11 @@ class StrategyEngine:
         """
         Subscribe the strategy engine to market-data events.
         """
+
+        self._event_bus.subscribe(
+            EventType.SESSIONS_READY,
+            self._on_sessions_ready,
+        )
         self._event_bus.subscribe(
             EventType.CANDLE_BATCH_CLOSED,
             self._on_candle_batch,
@@ -118,6 +129,16 @@ class StrategyEngine:
         Forward tick data to eligible strategies and publish
         any strategy outputs they generate.
         """
+
+        print(f"StrategyEngine received tick: {event.payload}")
+
+        print(
+            "StrategyEngine dispatcher class:",
+            type(self._dispatcher),
+            "module:",
+            type(self._dispatcher).__module__,
+        )
+
         outputs = self._dispatcher.dispatch_tick(
             event.payload
         )
@@ -161,3 +182,27 @@ class StrategyEngine:
                     payload=output,
                 )
             )
+
+
+
+    def _on_sessions_ready(
+        self,
+        event: Event,
+    ) -> None:
+        """
+        Create strategy instances from the registered strategy groups
+        and provide them to the dispatcher.
+        """
+
+        groups = self._strategy_registry.get_groups()
+
+        strategies = [
+            self._strategy_factory.create(group)
+            for group in groups
+        ]
+
+        self._dispatcher.set_strategies(strategies)
+
+        print(
+            f"StrategyEngine: registered {len(strategies)} strategies"
+        )

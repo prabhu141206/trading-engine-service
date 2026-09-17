@@ -32,7 +32,8 @@ class MarketSessionManager:
     def __init__(
         self,
         scheduler: MarketScheduler,
-        event_bus: EventBus
+        event_bus: EventBus,
+        force_market_open: bool = False,
     ) -> None:
         """
         Initialize MarketSessionManager.
@@ -48,7 +49,7 @@ class MarketSessionManager:
 
         self._scheduler = scheduler
         self._event_bus = event_bus
-
+        self._force_market_open = force_market_open
         self._running = False
         self._thread: Thread | None = None
 
@@ -114,6 +115,17 @@ class MarketSessionManager:
         Continuously process market scheduling cycles.
         """
 
+        print("MarketSessionManager loop started")
+
+        if self._force_market_open:
+            print("MarketSessionManager: forcing MARKET_OPEN for testing")
+
+            self._event_bus.publish(
+                SystemEvent(
+                    event_type=EventType.MARKET_OPEN
+                )
+            )
+
         while self._running:
 
             if not self._process_one_iteration():
@@ -142,6 +154,14 @@ class MarketSessionManager:
 
         next_event = self._scheduler.get_next_event(
             datetime.now(IST)
+        )
+
+        print(
+            f"Market scheduler: "
+            f"event={next_event.event}, "
+            f"event_time={next_event.event_time}, "
+            f"sleep={next_event.sleep_seconds}, "
+            f"state={next_event.market_state}"
         )
 
         # Scheduler is the single source of truth for market state.

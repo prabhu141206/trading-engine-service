@@ -67,6 +67,7 @@ class SessionManager:
         """
 
         active_sessions = self._load_active_users()
+        print(f"Active sessions loaded: {active_sessions}")
 
         for session in active_sessions:
 
@@ -119,7 +120,6 @@ class SessionManager:
     # ---------------------------------------------------------
     # Event handlers
     # ---------------------------------------------------------
-
     def _on_market_open(
         self,
         event: Event
@@ -128,7 +128,18 @@ class SessionManager:
         Handle MARKET_OPEN event.
         """
 
+        # Load active users from the database and populate
+        # the runtime session and strategy registries.
         self._create_user_sessions()
+
+        # Notify other components that runtime session
+        # configuration is ready.
+        self._event_bus.publish(
+            Event(
+                event_type=EventType.SESSIONS_READY,
+                payload=None,
+            )
+        )
 
     def _on_market_close(
         self,

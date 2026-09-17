@@ -106,6 +106,7 @@ class CandleBuilder:
         """
 
         tick: Tick = event.payload
+        print(f"CandleBuilder received tick: {tick}")
 
         self._process_tick(tick)
 
@@ -353,6 +354,7 @@ class CandleBuilder:
         # Publish completed candle batch
         # ---------------------------------------------------------
 
+        print(f"Candle batch closed: {batch}")
         self._event_bus.publish(
             Event(
                 event_type=EventType.CANDLE_BATCH_CLOSED,

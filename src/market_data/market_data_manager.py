@@ -43,7 +43,8 @@ class MarketDataManager:
 
     def start(self) -> None:
         """
-        Register lifecycle event handlers.
+        Register lifecycle event handler, also 
+        establish websocket connection.
         """
 
         self._event_bus.subscribe(
@@ -56,6 +57,9 @@ class MarketDataManager:
             self._on_market_close
         )
 
+        self._websocket_client.set_tick_handler(self._on_tick)
+        
+
     # ---------------------------------------------------------
     # Event Handlers
     # ---------------------------------------------------------
@@ -65,8 +69,15 @@ class MarketDataManager:
         Called after SessionManager has populated SubscriptionRegistry.
         """
 
+        print("MarketDataManager: SESSIONS_READY received")
+
         self._connect()
+
+        print("MarketDataManager: connect() returned")
+
         self._sync_subscriptions()
+
+        print("MarketDataManager: subscriptions synced")
 
     def _on_market_close(self, event: Event) -> None:
         """

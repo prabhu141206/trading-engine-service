@@ -15,7 +15,7 @@ class StrategyFactory:
         Create the concrete strategy represented by the group.
         """
 
-        if group.strategy_type is StrategyType.EMA:
+        if StrategyType(group.strategy_type) is StrategyType.EMA:
             return EMAStrategy(
                 symbol=group.symbol,
                 timeframe=group.timeframe,

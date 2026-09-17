@@ -13,8 +13,8 @@ class FakeActiveSymbolProvider:
     ) -> None:
         self._symbols = symbols
 
-    def get_active_symbols(self) -> list[str]:
+    def get_symbols(self) -> list[str]:
         """
         Return the currently active symbols.
         """
-        return list(self._symbols)
+        return self._symbols.copy()

@@ -129,6 +129,8 @@ class CandleScheduler:
         if self._running:
             return
 
+        print("CandleScheduler: start() called")
+
         self._running = True
         self._stop_event.clear()
 
@@ -138,6 +140,8 @@ class CandleScheduler:
         )
 
         self._thread.start()
+
+        print("CandleScheduler: background thread started")
 
 
     def stop(self) -> None:
@@ -165,6 +169,8 @@ class CandleScheduler:
         Continuously wait for candle boundaries and trigger them.
         """
 
+        print("CandleScheduler: _run() started")
+
         while self._running:
 
             current_time = datetime.now()
@@ -177,11 +183,27 @@ class CandleScheduler:
                 boundary - current_time
             ).total_seconds()
 
+            print(
+                f"CandleScheduler: current={current_time}, "
+                f"boundary={boundary}, "
+                f"waiting={wait_seconds:.2f}s"
+            )
+
             interrupted = self._stop_event.wait(
                 timeout=wait_seconds
             )
 
+            print(
+                f"CandleScheduler: wait finished, "
+                f"interrupted={interrupted}"
+            )
+
             if interrupted:
                 break
+
+            print(
+                f"CandleScheduler: triggering boundary "
+                f"{boundary}"
+            )
 
             self.trigger_boundary(boundary)
