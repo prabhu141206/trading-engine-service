@@ -8,10 +8,13 @@ from indicators.indicator_models import (
     IndicatorBatch,
     SymbolIndicatorState,
 )
+from market_data.models import Tick
 
+from registry.strategy_registry import StrategyRegistry
 from strategy.strategy_correlator import StrategyCorrelator
 from strategy.strategy_dispatcher import StrategyDispatcher
 from strategy.strategy_engine import StrategyEngine
+from strategy.strategy_factory import StrategyFactory
 from strategy.strategy_state import StrategyState
 from strategy.strategies.ema_strategy import EMAStrategy
 
@@ -37,10 +40,15 @@ def create_engine():
         strategies=[strategy],
     )
 
+    strategy_registry = StrategyRegistry()
+    strategy_factory = StrategyFactory()
+
     engine = StrategyEngine(
         event_bus=event_bus,
         correlator=correlator,
         dispatcher=dispatcher,
+        strategy_registry=strategy_registry,
+        strategy_factory=strategy_factory,
     )
 
     return engine, event_bus, strategy
@@ -196,23 +204,15 @@ def test_complete_long_trade_cycle():
     # Tick breaks trigger candle high.
     # ---------------------------------------------------------
 
-    tick_context = Mock()
-
-    tick_context.symbol = "NIFTY"
-    tick_context.timeframe = "5m"
-    tick_context.start_time = trigger_candle.start_time
-    tick_context.end_time = trigger_candle.end_time
-    tick_context.candle = trigger_candle
-    tick_context.indicators = {
-        "EMA_10": 100.0,
-    }
-
-    # The current implementation accepts a numeric tick.
-    tick_context.tick = 108.1
+    tick = Tick(
+        symbol="NIFTY",
+        price=108.1,
+        timestamp=datetime(2026, 8, 24, 10, 20),
+    )
 
     tick_event = Event(
         event_type=EventType.TICK_RECEIVED,
-        payload=tick_context,
+        payload=tick,
     )
 
     engine._on_tick(

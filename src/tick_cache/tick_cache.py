@@ -38,6 +38,12 @@ class TickCache:
             self._on_tick
         )
 
+        self._event_bus.subscribe(
+            EventType.MARKET_PROCESSING_COMPLETE,
+            self._on_market_processing_complete,
+        )
+
+
     def get_latest(self, symbol: str) -> Tick | None:
         """
         Return the latest tick for the symbol.
@@ -75,3 +81,17 @@ class TickCache:
 
         with self._lock:
             self._latest_ticks[tick.symbol] = tick
+
+
+    def _on_market_processing_complete(
+        self,
+        event: Event,
+    ) -> None:
+        """
+        Clear cached ticks after market processing
+        has completed.
+        """
+
+        self.clear()
+
+        

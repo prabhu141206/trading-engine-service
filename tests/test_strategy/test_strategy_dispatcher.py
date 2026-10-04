@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from market_data.models import Tick
+
 from strategy.strategy_context import StrategyContext
 from strategy.strategy_dispatcher import StrategyDispatcher
 from strategy.strategy_models import StrategyType
@@ -27,6 +29,7 @@ class FakeStrategy:
         self.strategy_type = strategy_type
         self.symbol = symbol
         self.timeframe = timeframe
+
         self._requirements = StrategyRequirements(
             candle_timeframes=candle_timeframes,
             requires_ticks=requires_ticks,
@@ -64,8 +67,6 @@ def create_context(
 ) -> StrategyContext:
     """
     Create a minimal StrategyContext for dispatcher tests.
-
-    The context represents one concrete market interval.
     """
     start_time = datetime(2026, 8, 23, 10, 15)
     end_time = datetime(2026, 8, 23, 10, 20)
@@ -75,6 +76,20 @@ def create_context(
         timeframe=timeframe,
         start_time=start_time,
         end_time=end_time,
+    )
+
+
+def create_tick(
+    symbol: str,
+    price: float = 25000.0,
+) -> Tick:
+    """
+    Create a minimal market tick for dispatcher tests.
+    """
+    return Tick(
+        symbol=symbol,
+        price=price,
+        timestamp=datetime(2026, 8, 23, 10, 15),
     )
 
 
@@ -124,8 +139,6 @@ def create_ema_reliance() -> FakeStrategy:
 def test_5m_context_routes_to_ema_nifty():
     """
     Verify that a NIFTY 5m context reaches the EMA + NIFTY strategy.
-
-    The strategy explicitly requires 5m candle data for NIFTY.
     """
     ema_nifty = create_ema_nifty()
     dispatcher = StrategyDispatcher([ema_nifty])
@@ -155,8 +168,6 @@ def test_wrong_timeframe_is_not_routed():
     """
     Verify that a strategy does not receive a context for a timeframe
     it did not declare as a requirement.
-
-    VWAP requires 15m, so a NIFTY 5m context must not reach it.
     """
     vwap_nifty = create_vwap_nifty()
     dispatcher = StrategyDispatcher([vwap_nifty])
@@ -171,9 +182,6 @@ def test_wrong_timeframe_is_not_routed():
 def test_wrong_symbol_is_not_routed():
     """
     Verify that a strategy receives data only for its configured symbol.
-
-    EMA + RELIANCE must not receive a NIFTY context even though both
-    strategies use the same 5m timeframe.
     """
     ema_reliance = create_ema_reliance()
     dispatcher = StrategyDispatcher([ema_reliance])
@@ -189,9 +197,6 @@ def test_same_symbol_different_strategies_are_routed_independently():
     """
     Verify that multiple strategies can operate on the same symbol
     while consuming different timeframes.
-
-    EMA + NIFTY receives 5m data.
-    VWAP + NIFTY receives 15m data.
     """
     ema_nifty = create_ema_nifty()
     vwap_nifty = create_vwap_nifty()
@@ -220,30 +225,36 @@ def test_same_symbol_different_strategies_are_routed_independently():
 
 def test_tick_routes_to_strategy_requiring_ticks():
     """
-    Verify that tick data reaches a strategy whose requirements declare
-    requires_ticks=True.
+    Verify that a tick reaches a strategy whose requirements
+    declare requires_ticks=True.
     """
     ema_nifty = create_ema_nifty()
     dispatcher = StrategyDispatcher([ema_nifty])
 
-    tick_context = create_context("NIFTY", "5m")
+    tick = create_tick("NIFTY")
 
-    dispatcher.dispatch_tick(tick_context)
+    dispatcher.dispatch_tick(tick)
 
-    assert ema_nifty.received_ticks == [tick_context]
+    assert len(ema_nifty.received_ticks) == 1
+
+    received_context = ema_nifty.received_ticks[0]
+
+    assert received_context.symbol == "NIFTY"
+    assert received_context.timeframe == "5m"
+    assert received_context.tick == tick
 
 
 def test_tick_does_not_route_to_strategy_not_requiring_ticks():
     """
-    Verify that tick data is not sent to strategies that explicitly
-    declare that they do not require ticks.
+    Verify that a tick is not sent to strategies that explicitly
+    declare that they do not require tick data.
     """
     vwap_nifty = create_vwap_nifty()
     dispatcher = StrategyDispatcher([vwap_nifty])
 
-    tick_context = create_context("NIFTY", "15m")
+    tick = create_tick("NIFTY")
 
-    dispatcher.dispatch_tick(tick_context)
+    dispatcher.dispatch_tick(tick)
 
     assert vwap_nifty.received_ticks == []
 
@@ -257,9 +268,9 @@ def test_tick_routes_only_to_matching_symbol():
     ema_reliance = create_ema_reliance()
     dispatcher = StrategyDispatcher([ema_reliance])
 
-    tick_context = create_context("NIFTY", "5m")
+    tick = create_tick("NIFTY")
 
-    dispatcher.dispatch_tick(tick_context)
+    dispatcher.dispatch_tick(tick)
 
     assert ema_reliance.received_ticks == []
 
@@ -267,10 +278,7 @@ def test_tick_routes_only_to_matching_symbol():
 def test_multiple_tick_strategies_on_same_symbol_receive_tick():
     """
     Verify that all tick-consuming strategies for the same symbol
-    receive the tick.
-
-    This is important because multiple strategies may operate on the
-    same underlying symbol in the future.
+    receive the same tick.
     """
     ema_nifty_one = create_ema_nifty()
     ema_nifty_two = create_ema_nifty()
@@ -282,9 +290,48 @@ def test_multiple_tick_strategies_on_same_symbol_receive_tick():
         ]
     )
 
-    tick_context = create_context("NIFTY", "5m")
+    tick = create_tick("NIFTY")
 
-    dispatcher.dispatch_tick(tick_context)
+    dispatcher.dispatch_tick(tick)
 
-    assert ema_nifty_one.received_ticks == [tick_context]
-    assert ema_nifty_two.received_ticks == [tick_context]
+    assert len(ema_nifty_one.received_ticks) == 1
+    assert len(ema_nifty_two.received_ticks) == 1
+
+    assert ema_nifty_one.received_ticks[0].tick == tick
+    assert ema_nifty_two.received_ticks[0].tick == tick
+
+
+def test_clear_removes_all_runtime_routes():
+    """
+    Verify that clear() removes strategies and all runtime
+    routing information from the dispatcher.
+    """
+    ema_nifty = create_ema_nifty()
+    vwap_nifty = create_vwap_nifty()
+
+    dispatcher = StrategyDispatcher(
+        [
+            ema_nifty,
+            vwap_nifty,
+        ]
+    )
+
+    # Verify routes exist before cleanup.
+    context = create_context("NIFTY", "5m")
+    tick = create_tick("NIFTY")
+
+    dispatcher.dispatch_context(context)
+    dispatcher.dispatch_tick(tick)
+
+    assert len(ema_nifty.received_contexts) == 1
+    assert len(ema_nifty.received_ticks) == 1
+
+    # Clear all runtime dispatcher state.
+    dispatcher.clear()
+
+    # New events must not reach previously registered strategies.
+    dispatcher.dispatch_context(context)
+    dispatcher.dispatch_tick(tick)
+
+    assert len(ema_nifty.received_contexts) == 1
+    assert len(ema_nifty.received_ticks) == 1

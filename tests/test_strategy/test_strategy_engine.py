@@ -6,7 +6,8 @@ from indicators.indicator_models import IndicatorBatch
 
 from strategy.strategy_engine import StrategyEngine
 from strategy.strategy_context import StrategyContext
-
+from registry.strategy_registry import StrategyRegistry
+from strategy.strategy_factory import StrategyFactory
 
 def create_candle_batch() -> CandleBatch:
     """
@@ -58,29 +59,36 @@ def create_engine():
     dispatcher.dispatch_context.return_value = []
     dispatcher.dispatch_tick.return_value = []
 
+    strategy_registry = Mock(spec=StrategyRegistry)
+    strategy_factory = Mock(spec=StrategyFactory)
+
     engine = StrategyEngine(
         event_bus=event_bus,
         correlator=correlator,
         dispatcher=dispatcher,
+        strategy_registry=strategy_registry,
+        strategy_factory=strategy_factory,
     )
 
     return engine, event_bus, correlator, dispatcher
 
 def test_start_subscribes_to_required_events():
     """
-    Verify that StrategyEngine subscribes to all market-data events
-    required for strategy processing.
+    Verify that StrategyEngine subscribes to all events
+    required for strategy processing and runtime shutdown.
 
     The engine must receive:
+        - session-ready events
         - completed candle batches
         - updated indicator batches
         - ticks
+        - market-processing-complete events
     """
     engine, event_bus, _, _ = create_engine()
 
     engine.start()
 
-    assert event_bus.subscribe.call_count == 3
+    assert event_bus.subscribe.call_count == 5
 
     subscribed_events = {
         call.args[0]
@@ -89,9 +97,11 @@ def test_start_subscribes_to_required_events():
 
     from event_system.event_type import EventType
 
+    assert EventType.SESSIONS_READY in subscribed_events
     assert EventType.CANDLE_BATCH_CLOSED in subscribed_events
     assert EventType.INDICATOR_BATCH_UPDATED in subscribed_events
     assert EventType.TICK_RECEIVED in subscribed_events
+    assert EventType.MARKET_PROCESSING_COMPLETE in subscribed_events
 
 
 def test_candle_event_is_sent_to_correlator():
@@ -279,3 +289,26 @@ def test_no_completed_context_means_nothing_is_dispatched():
     engine._on_candle_batch(event)
 
     dispatcher.dispatch_context.assert_not_called()
+
+
+def test_market_processing_complete_clears_strategy_runtime():
+    """
+    Verify that MARKET_PROCESSING_COMPLETE causes StrategyEngine
+    to clear both correlation state and strategy dispatch state.
+    """
+    engine, event_bus, correlator, dispatcher = create_engine()
+
+    engine.start()
+
+    from event_system.event import Event
+    from event_system.event_type import EventType
+
+    engine._on_market_processing_complete(
+        Event(
+            event_type=EventType.MARKET_PROCESSING_COMPLETE,
+            payload=None,
+        )
+    )
+
+    correlator.clear.assert_called_once_with()
+    dispatcher.clear.assert_called_once_with()

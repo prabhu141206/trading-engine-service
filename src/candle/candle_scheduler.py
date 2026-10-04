@@ -1,6 +1,3 @@
-from datetime import datetime, timedelta
-from typing import Callable
-
 from candle.candle_timeframe import CandleTimeframe
 
 import threading
@@ -129,6 +126,8 @@ class CandleScheduler:
         if self._running:
             return
 
+        print("CandleScheduler: start() called")
+
         self._running = True
         self._stop_event.clear()
 
@@ -138,6 +137,8 @@ class CandleScheduler:
         )
 
         self._thread.start()
+
+        print("CandleScheduler: background thread started")
 
 
     def stop(self) -> None:
@@ -156,6 +157,25 @@ class CandleScheduler:
 
         self._thread = None
 
+    def stop_after_boundary(self, boundary: datetime) -> None:
+        """
+        Process the final candle boundary and then stop
+        the scheduler.
+        """
+
+        if not self._running:
+            return
+
+        self.trigger_boundary(boundary)
+
+        self._running = False
+        self._stop_event.set()
+
+        if self._thread is not None:
+            self._thread.join()
+
+        self._thread = None
+
     # ---------------------------------------------------------
     # Internal Runtime Loop
     # --------------------------------------------------------
@@ -164,6 +184,8 @@ class CandleScheduler:
         """
         Continuously wait for candle boundaries and trigger them.
         """
+
+        print("CandleScheduler: _run() started")
 
         while self._running:
 
@@ -177,11 +199,27 @@ class CandleScheduler:
                 boundary - current_time
             ).total_seconds()
 
+            print(
+                f"CandleScheduler: current={current_time}, "
+                f"boundary={boundary}, "
+                f"waiting={wait_seconds:.2f}s"
+            )
+
             interrupted = self._stop_event.wait(
                 timeout=wait_seconds
             )
 
+            print(
+                f"CandleScheduler: wait finished, "
+                f"interrupted={interrupted}"
+            )
+
             if interrupted:
                 break
+
+            print(
+                f"CandleScheduler: triggering boundary "
+                f"{boundary}"
+            )
 
             self.trigger_boundary(boundary)

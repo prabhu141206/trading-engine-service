@@ -67,6 +67,7 @@ class SessionManager:
         """
 
         active_sessions = self._load_active_users()
+        print(f"Active sessions loaded: {active_sessions}")
 
         for session in active_sessions:
 
@@ -97,6 +98,15 @@ class SessionManager:
         self._strategy_registry.clear()
         self._strategy_user_registry.clear()
 
+
+    def shutdown_runtime(self) -> None:
+        """
+        Clear runtime session and registry state after
+        market processing has completed.
+        """
+
+        self._clear_user_sessions()
+
     # ---------------------------------------------------------
     # Event registration
     # ---------------------------------------------------------
@@ -112,14 +122,13 @@ class SessionManager:
         )
 
         self._event_bus.subscribe(
-            EventType.MARKET_CLOSE,
-            self._on_market_close
+            EventType.MARKET_PROCESSING_COMPLETE,
+            self._on_market_processing_complete,
         )
 
     # ---------------------------------------------------------
     # Event handlers
     # ---------------------------------------------------------
-
     def _on_market_open(
         self,
         event: Event
@@ -128,14 +137,29 @@ class SessionManager:
         Handle MARKET_OPEN event.
         """
 
+        # Load active users from the database and populate
+        # the runtime session and strategy registries.
         self._create_user_sessions()
 
-    def _on_market_close(
+        # Notify other components that runtime session
+        # configuration is ready.
+        self._event_bus.publish(
+            Event(
+                event_type=EventType.SESSIONS_READY,
+                payload=None,
+            )
+        )
+
+    def _on_market_processing_complete(
         self,
-        event: Event
+        event: Event,
     ) -> None:
         """
-        Handle MARKET_CLOSE event.
+        Clear runtime state after all market-close
+        processing has completed.
         """
 
-        self._clear_user_sessions()
+        self.shutdown_runtime()
+
+
+    

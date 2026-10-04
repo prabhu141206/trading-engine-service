@@ -1,3 +1,6 @@
+import threading
+import time
+
 from candle.candle_models import CandleBatch
 from candle.candle_timeframe import CandleTimeframe
 
@@ -7,12 +10,13 @@ from event_system.event_type import EventType
 
 from indicators.active_symbol_provider import ActiveSymbolProvider
 from indicators.ema_calculator import EMACalculator
-from indicators.historical_data_provider import HistoricalCandleProvider
+from market_data.historical_data_provider import HistoricalCandleProvider
 from indicators.indicator_models import (
     IndicatorBatch,
     SymbolIndicatorState,
 )
 from indicators.indicator_state import IndicatorStateStore
+
 
 
 class IndicatorEngine:
@@ -49,23 +53,66 @@ class IndicatorEngine:
         )
 
         self._warmup_limit = 50
-
+        self._max_warmup_retries = 5
+        self._warmup_retry_delay = 30
+        self._pending_batches: list[CandleBatch] = []
+        self._warmup_thread: threading.Thread | None = None
+        self._warmup_stop_event = threading.Event()
     # ---------------------------------------------------------
     # Lifecycle
     # ---------------------------------------------------------
 
     def start(self) -> None:
         """
-        Warm up indicators and subscribe to live candle batches.
+        Subscribe to lifecycle and market-data events.
         """
 
-        self._warmup()
+        self._event_bus.subscribe(
+            EventType.SESSIONS_READY,
+            self._on_sessions_ready,
+        )
 
         self._event_bus.subscribe(
             EventType.CANDLE_BATCH_CLOSED,
             self._on_candle_batch,
         )
 
+        self._event_bus.subscribe(
+            EventType.MARKET_PROCESSING_COMPLETE,
+            self._on_market_processing_complete,
+        )
+
+    def _on_sessions_ready(
+        self,
+        event: Event,
+    ) -> None:
+        """
+        Warm up indicators after runtime session configuration
+        has been loaded.
+        """
+
+        print("IndicatorEngine: SESSIONS_READY received")
+
+        if (
+            self._warmup_thread is not None
+            and self._warmup_thread.is_alive()
+        ):
+            print("IndicatorEngine: warm-up already running")
+            return
+
+        # Reset shutdown state for the new market session.
+        self._warmup_stop_event.clear()
+
+        self._warmup_thread = threading.Thread(
+            target=self._warmup,
+            daemon=True,
+        )
+
+        self._warmup_thread.start()
+
+        print(
+            "IndicatorEngine: historical warm-up started in background"
+        )
     # ---------------------------------------------------------
     # Warm-up
     # ---------------------------------------------------------
@@ -75,53 +122,96 @@ class IndicatorEngine:
         Initialize EMA 10 for every active symbol.
         """
 
-        symbols = (
-            self._symbol_provider.get_active_symbols()
-        )
+        symbols = self._symbol_provider.get_symbols()
 
         for symbol in symbols:
+
+            # Stop warm-up if market runtime is shutting down.
+            if self._warmup_stop_event.is_set():
+                return
+
             self._warmup_symbol(symbol)
+
+        # Do not process buffered batches after shutdown.
+        if self._warmup_stop_event.is_set():
+            return
+
+        pending_batches = self._pending_batches
+        self._pending_batches = []
+
+        for batch in pending_batches:
+
+            # Shutdown may have started while processing
+            # the pending batches.
+            if self._warmup_stop_event.is_set():
+                return
+
+            self._process_candle_batch(batch)
 
     def _warmup_symbol(
         self,
         symbol: str,
     ) -> None:
 
-        candles = (
-            self._historical_provider
-            .get_historical_candles(
-                symbol=symbol,
-                timeframe=self._timeframe,
-                limit=self._warmup_limit,
-            )
-        )
+        for attempt in range(1, self._max_warmup_retries + 1):
+                try:
+                    print(
+                        f"IndicatorEngine: warming up {symbol} "
+                        f"(attempt {attempt}/{self._max_warmup_retries})"
+                    )
 
-        if len(candles) < self._warmup_limit:
-            raise ValueError(
-                f"Insufficient historical candles "
-                f"for {symbol}. "
-                f"Required: {self._warmup_limit}, "
-                f"received: {len(candles)}."
-            )
+                    candles = self._historical_provider.get_historical_candles(
+                        symbol=symbol,
+                        timeframe=self._timeframe,
+                        limit=self._warmup_limit,
+                    )
 
-        closes = [
-            candle.close
-            for candle in candles
-        ]
+                    if len(candles) < self._warmup_limit:
+                        raise ValueError(
+                            f"Not enough historical candles for {symbol}. "
+                            f"Required={self._warmup_limit}, "
+                            f"received={len(candles)}"
+                        )
 
-        ema_10 = (
-            self._ema_calculator
-            .calculate_from_closes(closes)
-        )
+                    closes = [candle.close for candle in candles]
 
-        self._state_store.set(
-            SymbolIndicatorState(
-                symbol=symbol,
-                timeframe=self._timeframe,
-                ema_10=ema_10,
-                ready=True,
-            )
-        )
+                    ema_10 = self._ema_calculator.calculate_from_closes(
+                        closes
+                    )
+
+                    self._state_store.set(
+                        SymbolIndicatorState(
+                            symbol=symbol,
+                            timeframe=self._timeframe,
+                            ema_10=ema_10,
+                            ready=True,
+                        )
+                    )
+
+                    print(
+                        f"IndicatorEngine: warm-up completed for {symbol}"
+                    )
+
+                    return
+
+                except Exception as e:
+                    print(
+                        f"IndicatorEngine: warm-up failed for {symbol} "
+                        f"(attempt {attempt}): {e}"
+                    )
+
+                    if attempt == self._max_warmup_retries:
+                        raise
+
+                    print(
+                        f"IndicatorEngine: retrying {symbol} "
+                        f"in {self._warmup_retry_delay} seconds"
+                    )
+
+                    if self._warmup_stop_event.wait(
+                        timeout=self._warmup_retry_delay
+                    ):
+                        return
 
     # ---------------------------------------------------------
     # Event Handler
@@ -136,6 +226,17 @@ class IndicatorEngine:
         """
 
         batch: CandleBatch = event.payload
+
+        for symbol in batch.candles:
+            state = self._state_store.get(symbol, batch.timeframe)
+
+            if state is None or not state.ready:
+                self._pending_batches.append(batch)
+                print(
+                    f"IndicatorEngine: buffering candle batch "
+                    f"because indicator state is not ready for {symbol}"
+                )
+                return
 
         self._process_candle_batch(batch)
 
@@ -209,3 +310,42 @@ class IndicatorEngine:
                 payload=indicator_batch,
             )
         )
+
+    def clear(self):
+        """
+        Remove all runtime indicator state.
+        """
+        self._state_store.clear()
+        self._pending_batches.clear()
+
+    def shutdown_runtime(self) -> None:
+        """
+        Stop indicator warm-up and clear runtime state
+        after market processing has completed.
+        """
+
+        # Tell the background warm-up thread to stop.
+        self._warmup_stop_event.set()
+
+        # Wait for the warm-up thread to actually finish.
+        if (
+            self._warmup_thread is not None
+            and self._warmup_thread.is_alive()
+        ):
+            self._warmup_thread.join()
+
+        # Only clear state after the warm-up thread has stopped.
+        self._state_store.clear()
+        self._pending_batches.clear()
+
+
+    def _on_market_processing_complete(
+        self,
+        event: Event,
+    ) -> None:
+        """
+        Clear indicator runtime state after all
+        market-close processing has completed.
+        """
+
+        self.shutdown_runtime()
