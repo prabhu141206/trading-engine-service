@@ -11,23 +11,23 @@ Absolutely. Here is the **Phase 2 TODO checklist** we should follow. We can tick
   * First tick creates candle ✅
   * Subsequent ticks update OHLC ✅
 
-* [ ] **2. Test candle interval transition**
+* [✅ ] **2. Test candle interval transition**
 
-  * New 5-minute interval starts
-  * Previous candle is finalized correctly
+  * New 5-minute interval starts  ✅
+  * Previous candle is finalized correctly  ✅
 
-* [ ] **3. Test CandleBatch creation**
+* [✅ ] **3. Test CandleBatch creation**
 
-  * Correct symbol(s)
-  * Correct timeframe
-  * Correct start/end time
-  * Correct OHLC
+  * Correct symbol(s)  ✅
+  * Correct timeframe  ✅
+  * Correct start/end time  ✅
+  * Correct OHLC   ✅
 
-* [ ] **4. Test `CANDLE_BATCH_CLOSED` event**
+* [✅] **4. Test `CANDLE_BATCH_CLOSED` event**
 
-  * CandleBuilder publishes event
-  * IndicatorEngine receives it
-  * StrategyEngine receives it
+  * CandleBuilder publishes event ✅
+  * IndicatorEngine receives it ✅
+  * StrategyEngine receives it  ✅
 
 ---
 

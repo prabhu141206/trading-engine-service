@@ -252,7 +252,8 @@ class MarketSessionManager:
         """
 
         event = SystemEvent(
-            event_type=next_event.event
+            event_type=next_event.event,
+            payload=next_event.event_time,
         )
 
         self._event_bus.publish(event)

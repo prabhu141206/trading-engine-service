@@ -59,6 +59,7 @@ from tick_cache.tick_cache import TickCache
 from candle.candle_builder import CandleBuilder
 from candle.candle_scheduler import CandleScheduler
 from candle.candle_timeframe import CandleTimeframe
+from candle.candle_session_manager import CandleSessionManager
 
 
 # =========================================================
@@ -191,6 +192,11 @@ def build_application():
         on_boundary=candle_builder.finalize_interval,
     )
 
+    candle_session_manager = CandleSessionManager(
+        event_bus=event_bus,
+        candle_scheduler=candle_scheduler,
+    )
+
     # =========================================================
     # Indicator System
     # =========================================================
@@ -277,6 +283,7 @@ def build_application():
         "tick_cache": tick_cache,
         "candle_builder": candle_builder,
         "candle_scheduler": candle_scheduler,
+        "candle_session_manager": candle_session_manager,
 
         # Indicator system
         "indicator_state_store": indicator_state_store,
@@ -314,6 +321,7 @@ def main() -> None:
     application["tick_cache"].start()
     application["candle_builder"].start()
     application["candle_scheduler"].start()
+    application["candle_session_manager"].start()
     application["indicator_engine"].start()
     application["strategy_engine"].start()
     application["signal_distributor"].start()

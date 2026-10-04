@@ -36,7 +36,12 @@ def create_manager():
         strategy_user_registry,
     )
 
+'''
+Coverage: SessionManager startup/event subscription.
+It proves that SessionManager.start() subscribes 
+its market-open handler to the EventBus.
 
+'''
 def test_subscribe_market_open():
     manager, event_bus, _, _, _ = create_manager()
 
@@ -47,15 +52,19 @@ def test_subscribe_market_open():
     ) == 1
 
 
-def test_subscribe_market_close():
-    manager, event_bus, _, _, _ = create_manager()
 
-    manager.start()
+'''
+    Coverage:
 
-    assert len(
-        event_bus._subscribers[EventType.MARKET_CLOSE]
-    ) == 1
+    MARKET_OPEN
+        ↓
+    SessionManager
+        ↓
+    StrategyRegistry
 
+    It verifies both quantity and 
+    contents of the strategy groups.
+'''
 
 def test_market_open_populates_subscription_registry():
     (
@@ -118,7 +127,19 @@ def test_market_open_populates_strategy_registry():
         ("EMA", "FINNIFTY", "5m", (("period", 10),)),
     }
 
+    '''
+    Coverage:
 
+    MARKET_OPEN
+        ↓
+    SessionManager
+        ↓
+    StrategyUserRegistry
+
+    This is particularly useful because it 
+    checks that the relationship between user and strategy 
+    is preserved.
+    '''
 def test_market_open_populates_strategy_user_registry():
     (
         manager,
@@ -171,4 +192,74 @@ def test_market_open_populates_strategy_user_registry():
     assert (
         strategy_user_registry.get_subscribers(ema_finnifty)
         == {303}
+    )
+
+
+def test_market_processing_complete_clears_runtime_state():
+    """
+    Verify that market processing completion clears
+    user sessions and all runtime registries.
+    """
+
+    (
+        manager,
+        event_bus,
+        subscription_registry,
+        strategy_registry,
+        strategy_user_registry,
+    ) = create_manager()
+
+    manager.start()
+
+    # MARKET_OPEN creates the actual runtime session state.
+    event_bus.publish(
+        Event(
+            event_type=EventType.MARKET_OPEN,
+            payload=None,
+        )
+    )
+
+    # Verify runtime state exists before cleanup.
+    assert manager._sessions
+    assert subscription_registry.get_symbols()
+
+    assert strategy_registry.get_groups()
+
+    assert (
+        strategy_user_registry.get_subscribers(
+            StrategyGroup(
+                strategy_type="EMA",
+                symbol="NIFTY",
+                timeframe="5m",
+                parameters=(("period", 10),),
+            )
+        )
+        == {101, 202}
+    )
+
+    # Trigger market-processing completion.
+    event_bus.publish(
+        Event(
+            event_type=EventType.MARKET_PROCESSING_COMPLETE,
+            payload=None,
+        )
+    )
+
+    # All runtime state must now be cleared.
+    assert manager._sessions == {}
+
+    assert subscription_registry.get_symbols() == set()
+
+    assert strategy_registry.get_groups() == set()
+
+    assert (
+        strategy_user_registry.get_subscribers(
+            StrategyGroup(
+                strategy_type="EMA",
+                symbol="NIFTY",
+                timeframe="5m",
+                parameters=(("period", 10),),
+            )
+        )
+        == set()
     )

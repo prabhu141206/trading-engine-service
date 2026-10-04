@@ -1,12 +1,17 @@
 from datetime import datetime
 from unittest.mock import Mock
 
+from market_data.models import Tick
+
 from event_system.event import Event
 from event_system.event_type import EventType
+
+from registry.strategy_registry import StrategyRegistry
 
 from strategy.strategy_context import StrategyContext
 from strategy.strategy_dispatcher import StrategyDispatcher
 from strategy.strategy_engine import StrategyEngine
+from strategy.strategy_factory import StrategyFactory
 from strategy.strategy_models import StrategyGroup
 from strategy.strategy_output import (
     SignalSide,
@@ -109,86 +114,35 @@ def create_engine(
 
     This isolates the signal propagation path being tested.
     """
+
+    # Mock the external event system because these tests
+    # focus on StrategyOutput propagation.
     event_bus = Mock()
+
+    # Mock the correlator because completed contexts are
+    # supplied directly by the test.
     correlator = Mock()
 
+    # Create the real dispatcher with the test strategy.
     dispatcher = StrategyDispatcher(
         strategies=[strategy],
     )
+
+    # StrategyEngine now requires a registry and factory.
+    # They are not the focus of these tests, but valid
+    # dependencies are required by the current constructor.
+    strategy_registry = StrategyRegistry()
+    strategy_factory = StrategyFactory()
 
     engine = StrategyEngine(
         event_bus=event_bus,
         correlator=correlator,
         dispatcher=dispatcher,
+        strategy_registry=strategy_registry,
+        strategy_factory=strategy_factory,
     )
 
     return engine, event_bus, correlator
-
-
-def test_context_strategy_output_is_published():
-    """
-    Verify the complete context-based signal path.
-
-    A strategy generates StrategyOutput, and StrategyEngine publishes
-    that output as STRATEGY_SIGNAL_GENERATED on the EventBus.
-    """
-
-    strategy = FakeSignalStrategy()
-
-    engine, event_bus, correlator = create_engine(
-        strategy
-    )
-
-    context = create_context()
-
-    correlator.process_candle_batch.return_value = [
-        context
-    ]
-
-    batch_event = Mock()
-    batch_event.payload = Mock()
-
-    engine._on_candle_batch(batch_event)
-
-    # The strategy must receive the completed context.
-    assert strategy.received_contexts == [context]
-
-    # Exactly one strategy signal should be published.
-    event_bus.publish.assert_called_once()
-
-    published_event = (
-        event_bus.publish.call_args.args[0]
-    )
-
-    # The correct event type must be published.
-    assert (
-        published_event.event_type
-        is EventType.STRATEGY_SIGNAL_GENERATED
-    )
-
-    # The exact StrategyGroup must survive the publication path.
-    assert (
-        published_event.payload.strategy_group
-        == strategy.strategy_group
-    )
-
-    # The signal must belong to NIFTY.
-    assert (
-        published_event.payload.strategy_group.symbol
-        == "NIFTY"
-    )
-
-    # The signal must represent an ENTRY decision.
-    assert (
-        published_event.payload.signal_type
-        is SignalType.ENTRY
-    )
-
-    # The ENTRY signal must be BUY.
-    assert (
-        published_event.payload.side
-        is SignalSide.BUY
-    )
 
 
 def test_tick_strategy_output_is_published():
@@ -205,17 +159,30 @@ def test_tick_strategy_output_is_published():
         strategy
     )
 
-    context = create_context()
+    tick = Tick(
+        symbol="NIFTY",
+        price=25100.5,
+        timestamp=datetime(2026, 8, 24, 10, 20),
+    )
 
     tick_event = Event(
         event_type=EventType.TICK_RECEIVED,
-        payload=context,
+        payload=tick,
     )
 
     engine._on_tick(tick_event)
 
-    # The strategy must receive the tick context.
-    assert strategy.received_ticks == [context]
+    # The strategy must receive exactly one tick context.
+    assert len(strategy.received_ticks) == 1
+
+    received_context = strategy.received_ticks[0]
+
+    # The original Tick object must be preserved.
+    assert received_context.tick is tick
+
+    # The context must contain the correct routing information.
+    assert received_context.symbol == "NIFTY"
+    assert received_context.timeframe == "5m"
 
     # Exactly one strategy signal should be published.
     event_bus.publish.assert_called_once()
@@ -241,7 +208,6 @@ def test_tick_strategy_output_is_published():
         published_event.payload.strategy_group.symbol
         == "NIFTY"
     )
-
 
 def test_no_strategy_output_means_no_event_published():
     """
@@ -312,10 +278,17 @@ def test_multiple_strategy_outputs_are_published():
         ]
     )
 
+    # Current StrategyEngine constructor requires
+    # registry and factory dependencies.
+    strategy_registry = StrategyRegistry()
+    strategy_factory = StrategyFactory()
+
     engine = StrategyEngine(
         event_bus=event_bus,
         correlator=correlator,
         dispatcher=dispatcher,
+        strategy_registry=strategy_registry,
+        strategy_factory=strategy_factory,
     )
 
     context = create_context()

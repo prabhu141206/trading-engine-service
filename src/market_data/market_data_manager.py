@@ -53,8 +53,13 @@ class MarketDataManager:
         )
 
         self._event_bus.subscribe(
+            EventType.MARKET_PROCESSING_COMPLETE,
+            self._on_market_processing_complete,
+        )
+
+        self._event_bus.subscribe(
             EventType.MARKET_CLOSE,
-            self._on_market_close
+            self._on_market_close,
         )
 
         self._websocket_client.set_tick_handler(self._on_tick)
@@ -77,11 +82,14 @@ class MarketDataManager:
 
         self._sync_subscriptions()
 
+        self._accepting_ticks = True
+
         print("MarketDataManager: subscriptions synced")
 
-    def _on_market_close(self, event: Event) -> None:
+    def _on_market_processing_complete(self, event: Event) -> None:
         """
-        Disconnect websocket and clear runtime subscription state.
+        Disconnect websocket and clear runtime subscription state
+        after market processing has completed.
         """
 
         if not self._connected:
@@ -136,12 +144,28 @@ class MarketDataManager:
 
     def _on_tick(self, tick: Tick) -> None:
         """
-        Publish incoming tick to EventBus.
+        Publish incoming ticks only while the market-data
+        pipeline is accepting live ticks.
         """
+
+        if not self._accepting_ticks:
+            return
 
         self._event_bus.publish(
             Event(
                 event_type=EventType.TICK_RECEIVED,
-                payload=tick
+                payload=tick,
             )
         )
+
+
+    def _on_market_close(
+        self,
+        event: Event,
+    ) -> None:
+        """
+        Stop accepting new market ticks when the market
+        processing phase begins to close.
+        """
+
+        self._accepting_ticks = False

@@ -1,6 +1,3 @@
-from datetime import datetime, timedelta
-from typing import Callable
-
 from candle.candle_timeframe import CandleTimeframe
 
 import threading
@@ -151,6 +148,25 @@ class CandleScheduler:
 
         if not self._running:
             return
+
+        self._running = False
+        self._stop_event.set()
+
+        if self._thread is not None:
+            self._thread.join()
+
+        self._thread = None
+
+    def stop_after_boundary(self, boundary: datetime) -> None:
+        """
+        Process the final candle boundary and then stop
+        the scheduler.
+        """
+
+        if not self._running:
+            return
+
+        self.trigger_boundary(boundary)
 
         self._running = False
         self._stop_event.set()

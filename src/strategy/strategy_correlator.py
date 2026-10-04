@@ -119,3 +119,11 @@ class StrategyCorrelator:
                 "EMA_10": indicator.ema_10,
             },
         )
+
+    def clear(self) -> None:
+        """
+        Clear all pending candle and indicator correlation state.
+        """
+
+        self._candles.clear()
+        self._indicators.clear()

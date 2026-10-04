@@ -57,6 +57,7 @@ class IndicatorEngine:
         self._warmup_retry_delay = 30
         self._pending_batches: list[CandleBatch] = []
         self._warmup_thread: threading.Thread | None = None
+        self._warmup_stop_event = threading.Event()
     # ---------------------------------------------------------
     # Lifecycle
     # ---------------------------------------------------------
@@ -76,6 +77,11 @@ class IndicatorEngine:
             self._on_candle_batch,
         )
 
+        self._event_bus.subscribe(
+            EventType.MARKET_PROCESSING_COMPLETE,
+            self._on_market_processing_complete,
+        )
+
     def _on_sessions_ready(
         self,
         event: Event,
@@ -86,9 +92,16 @@ class IndicatorEngine:
         """
 
         print("IndicatorEngine: SESSIONS_READY received")
-        if self._warmup_thread is not None and self._warmup_thread.is_alive():
+
+        if (
+            self._warmup_thread is not None
+            and self._warmup_thread.is_alive()
+        ):
             print("IndicatorEngine: warm-up already running")
             return
+
+        # Reset shutdown state for the new market session.
+        self._warmup_stop_event.clear()
 
         self._warmup_thread = threading.Thread(
             target=self._warmup,
@@ -97,7 +110,9 @@ class IndicatorEngine:
 
         self._warmup_thread.start()
 
-        print("IndicatorEngine: historical warm-up started in background")
+        print(
+            "IndicatorEngine: historical warm-up started in background"
+        )
     # ---------------------------------------------------------
     # Warm-up
     # ---------------------------------------------------------
@@ -107,17 +122,30 @@ class IndicatorEngine:
         Initialize EMA 10 for every active symbol.
         """
 
-        symbols = (
-            self._symbol_provider.get_symbols()
-        )
+        symbols = self._symbol_provider.get_symbols()
 
         for symbol in symbols:
+
+            # Stop warm-up if market runtime is shutting down.
+            if self._warmup_stop_event.is_set():
+                return
+
             self._warmup_symbol(symbol)
+
+        # Do not process buffered batches after shutdown.
+        if self._warmup_stop_event.is_set():
+            return
 
         pending_batches = self._pending_batches
         self._pending_batches = []
 
         for batch in pending_batches:
+
+            # Shutdown may have started while processing
+            # the pending batches.
+            if self._warmup_stop_event.is_set():
+                return
+
             self._process_candle_batch(batch)
 
     def _warmup_symbol(
@@ -180,7 +208,10 @@ class IndicatorEngine:
                         f"in {self._warmup_retry_delay} seconds"
                     )
 
-                    time.sleep(self._warmup_retry_delay)
+                    if self._warmup_stop_event.wait(
+                        timeout=self._warmup_retry_delay
+                    ):
+                        return
 
     # ---------------------------------------------------------
     # Event Handler
@@ -279,3 +310,42 @@ class IndicatorEngine:
                 payload=indicator_batch,
             )
         )
+
+    def clear(self):
+        """
+        Remove all runtime indicator state.
+        """
+        self._state_store.clear()
+        self._pending_batches.clear()
+
+    def shutdown_runtime(self) -> None:
+        """
+        Stop indicator warm-up and clear runtime state
+        after market processing has completed.
+        """
+
+        # Tell the background warm-up thread to stop.
+        self._warmup_stop_event.set()
+
+        # Wait for the warm-up thread to actually finish.
+        if (
+            self._warmup_thread is not None
+            and self._warmup_thread.is_alive()
+        ):
+            self._warmup_thread.join()
+
+        # Only clear state after the warm-up thread has stopped.
+        self._state_store.clear()
+        self._pending_batches.clear()
+
+
+    def _on_market_processing_complete(
+        self,
+        event: Event,
+    ) -> None:
+        """
+        Clear indicator runtime state after all
+        market-close processing has completed.
+        """
+
+        self.shutdown_runtime()

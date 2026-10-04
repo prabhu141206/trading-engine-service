@@ -56,6 +56,16 @@ class StrategyDispatcher:
 
         self._build_routes()
 
+
+    def clear(self) -> None:
+        """
+        Remove all runtime strategies and routing indexes.
+        """
+
+        self._strategies.clear()
+        self._context_routes.clear()
+        self._tick_routes.clear()
+
         
     def _build_routes(self) -> None:
         """

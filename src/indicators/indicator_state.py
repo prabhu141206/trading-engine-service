@@ -16,6 +16,7 @@ class IndicatorStateStore:
         self,
         state: SymbolIndicatorState,
     ) -> None:
+        
         key = (
             state.symbol,
             state.timeframe,
@@ -33,6 +34,12 @@ class IndicatorStateStore:
             (symbol, timeframe)
         )
 
+    def clear(self) -> None:
+        """
+        Remove all runtime indicator state.
+        """
+        self._states.clear()
+        
     def remove(
         self,
         symbol: str,

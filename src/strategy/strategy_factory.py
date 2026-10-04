@@ -15,7 +15,14 @@ class StrategyFactory:
         Create the concrete strategy represented by the group.
         """
 
-        if StrategyType(group.strategy_type) is StrategyType.EMA:
+        try:
+            strategy_type = StrategyType(group.strategy_type)
+        except ValueError:
+            raise ValueError(
+                f"Unsupported strategy type: {group.strategy_type}"
+            )
+
+        if strategy_type is StrategyType.EMA:
             return EMAStrategy(
                 symbol=group.symbol,
                 timeframe=group.timeframe,

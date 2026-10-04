@@ -185,3 +185,52 @@ def test_run_once_triggers_completed_interval():
             15,
         )
     ]
+
+
+
+def test_stop_after_boundary_triggers_once_and_stops():
+    """
+    Verify that stop_after_boundary() processes the requested
+    final boundary once and stops the scheduler.
+    """
+
+    received_boundaries = []
+
+    def on_boundary(interval_start):
+        received_boundaries.append(interval_start)
+
+    scheduler = CandleScheduler(
+        timeframe=CandleTimeframe.FIVE_MINUTES,
+        on_boundary=on_boundary,
+    )
+
+    final_boundary = datetime(
+        2026,
+        9,
+        27,
+        15,
+        0,
+    )
+
+    # Start the scheduler.
+    scheduler.start()
+
+    # Request the final boundary and stop.
+    scheduler.stop_after_boundary(final_boundary)
+
+    # The final interval should have been processed exactly once.
+    assert received_boundaries == [
+        datetime(
+            2026,
+            9,
+            27,
+            14,
+            55,
+        )
+    ]
+
+    # Scheduler must no longer be running.
+    assert scheduler._running is False
+
+    # Scheduler thread must have been cleaned up.
+    assert scheduler._thread is None

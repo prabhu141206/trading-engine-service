@@ -71,6 +71,11 @@ class StrategyEngine:
             self._on_tick,
         )
 
+        self._event_bus.subscribe(
+            EventType.MARKET_PROCESSING_COMPLETE,
+            self._on_market_processing_complete,
+        )
+
     # ---------------------------------------------------------
     # Candle
     # ---------------------------------------------------------
@@ -206,3 +211,24 @@ class StrategyEngine:
         print(
             f"StrategyEngine: registered {len(strategies)} strategies"
         )
+
+    def shutdown_runtime(self) -> None:
+        """
+        Clear all strategy runtime state after the market
+        processing lifecycle has completed.
+        """
+
+        self._correlator.clear()
+        self._dispatcher.clear()
+
+
+    def _on_market_processing_complete(
+        self,
+        event: Event,
+    ) -> None:
+        """
+        Clear strategy runtime state after all
+        market-close processing has completed.
+        """
+
+        self.shutdown_runtime()

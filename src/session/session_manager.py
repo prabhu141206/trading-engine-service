@@ -98,6 +98,15 @@ class SessionManager:
         self._strategy_registry.clear()
         self._strategy_user_registry.clear()
 
+
+    def shutdown_runtime(self) -> None:
+        """
+        Clear runtime session and registry state after
+        market processing has completed.
+        """
+
+        self._clear_user_sessions()
+
     # ---------------------------------------------------------
     # Event registration
     # ---------------------------------------------------------
@@ -113,8 +122,8 @@ class SessionManager:
         )
 
         self._event_bus.subscribe(
-            EventType.MARKET_CLOSE,
-            self._on_market_close
+            EventType.MARKET_PROCESSING_COMPLETE,
+            self._on_market_processing_complete,
         )
 
     # ---------------------------------------------------------
@@ -141,12 +150,16 @@ class SessionManager:
             )
         )
 
-    def _on_market_close(
+    def _on_market_processing_complete(
         self,
-        event: Event
+        event: Event,
     ) -> None:
         """
-        Handle MARKET_CLOSE event.
+        Clear runtime state after all market-close
+        processing has completed.
         """
 
-        self._clear_user_sessions()
+        self.shutdown_runtime()
+
+
+    
