@@ -1,6 +1,7 @@
 from datetime import datetime
 from unittest.mock import Mock
 
+from event_system.event_type import EventType
 from signal_distribution.signal_distributor import SignalDistributor
 from strategy.strategy_models import StrategyGroup
 from strategy.strategy_output import (
@@ -210,3 +211,45 @@ def test_same_signal_object_is_delivered_to_each_user():
         signal,
         signal,
     ]
+
+def test_signal_distribution_publishes_monitoring_events():
+    """
+    One incoming strategy signal should publish one SIGNAL_RECEIVED
+    event and one SIGNAL_DISTRIBUTED event per delivered user.
+    """
+    distributor, registry, delivery = create_distributor()
+
+    group = create_ema_nifty_group()
+    signal = create_signal(group)
+
+    registry.subscribe(101, group)
+    registry.subscribe(102, group)
+
+    distributor.distribute(signal)
+
+    published_events = [
+        call.args[0]
+        for call in distributor._event_bus.publish.call_args_list
+    ]
+
+    received_events = [
+        event
+        for event in published_events
+        if event.event_type == EventType.SIGNAL_RECEIVED
+    ]
+
+    distributed_events = [
+        event
+        for event in published_events
+        if event.event_type == EventType.SIGNAL_DISTRIBUTED
+    ]
+
+    assert len(received_events) == 1
+    assert len(distributed_events) == 2
+
+    assert received_events[0].payload is signal
+
+    assert all(
+        event.payload is signal
+        for event in distributed_events
+    )

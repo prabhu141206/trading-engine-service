@@ -6,6 +6,12 @@ the application's runtime dependencies.
 """
 
 # =========================================================
+# System Monitoring
+# =========================================================
+
+from monitoring.system_monitor import SystemMonitor
+
+# =========================================================
 # Event System
 # =========================================================
 
@@ -108,6 +114,14 @@ def build_application():
     # =====================================================
 
     event_bus = EventBus()
+
+    # =====================================================
+    # System Monitoring
+    # =====================================================
+
+    system_monitor = SystemMonitor(
+        event_bus=event_bus,
+    )
 
     # =====================================================
     # Runtime Registries
@@ -273,6 +287,7 @@ def build_application():
         # Application services
         "session_manager": session_manager,
         "market_data_manager": market_data_manager,
+        "system_monitor": system_monitor,
 
         # Broker / market data
         "authenticator": authenticator,

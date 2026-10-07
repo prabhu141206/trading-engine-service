@@ -4,6 +4,7 @@ from event_system.event_type import EventType
 
 from market_data.models import Tick
 from market_data.websocket_client import WebSocketClient
+from monitoring.system_monitor import SystemMonitor
 from registry.subscription_registry import SubscriptionRegistry
 
 class MarketDataManager:
@@ -20,7 +21,8 @@ class MarketDataManager:
         self,
         event_bus: EventBus,
         subscription_registry: SubscriptionRegistry,
-        websocket_client: WebSocketClient
+        websocket_client: WebSocketClient,
+        system_monitor: SystemMonitor,
     ) -> None:
 
 
@@ -30,6 +32,7 @@ class MarketDataManager:
         self._event_bus = event_bus
         self._subscription_registry = subscription_registry
         self._websocket_client = websocket_client
+        self._system_monitor = system_monitor
 
         # ---------------------------------------------------------
         # Internal State
@@ -103,6 +106,8 @@ class MarketDataManager:
         self._websocket_client.disconnect()
 
         self._connected = False
+
+        self._system_monitor.update_market_state("DISCONNECTED")
         self._subscribed_symbols.clear()
 
     # ---------------------------------------------------------
@@ -122,6 +127,8 @@ class MarketDataManager:
 
         self._connected = True
 
+        self._system_monitor.update_market_state("CONNECTED")
+
     def _sync_subscriptions(self) -> None:
         """
         Synchronize broker subscriptions with SubscriptionRegistry.
@@ -138,6 +145,10 @@ class MarketDataManager:
 
         self._subscribed_symbols.update(to_add)
 
+        self._system_monitor.update_active_symbols(
+            len(self._subscribed_symbols)
+        )
+
     # ---------------------------------------------------------
     # Tick Processing
     # ---------------------------------------------------------
@@ -150,6 +161,8 @@ class MarketDataManager:
 
         if not self._accepting_ticks:
             return
+
+        self._system_monitor.record_tick()
 
         self._event_bus.publish(
             Event(

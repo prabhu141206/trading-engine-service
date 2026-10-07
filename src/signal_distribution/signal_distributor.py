@@ -75,6 +75,15 @@ class SignalDistributor:
         """
         Deliver a generated strategy signal to every subscribed user.
         """
+
+        # One strategy signal entered the distribution pipeline.
+        self._event_bus.publish(
+            Event(
+                event_type=EventType.SIGNAL_RECEIVED,
+                payload=signal,
+            )
+        )
+
         users = (
             self._subscription_registry.get_subscribers(
                 signal.strategy_group
@@ -85,4 +94,12 @@ class SignalDistributor:
             self._delivery.deliver(
                 user_id=user_id,
                 signal=signal,
+            )
+
+            # One successful delivery call completed.
+            self._event_bus.publish(
+                Event(
+                    event_type=EventType.SIGNAL_DISTRIBUTED,
+                    payload=signal,
+                )
             )
