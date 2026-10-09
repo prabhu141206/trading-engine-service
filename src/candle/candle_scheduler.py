@@ -1,8 +1,9 @@
-from candle.candle_timeframe import CandleTimeframe
 
 import threading
 from datetime import datetime, timedelta
 from typing import Callable
+
+from candle.candle_timeframe import CandleTimeframe
 
 
 class CandleScheduler:
@@ -16,7 +17,6 @@ class CandleScheduler:
         timeframe: CandleTimeframe,
         on_boundary: Callable[[datetime], None],
     ) -> None:
-
         self._timeframe = timeframe
         self._on_boundary = on_boundary
 
@@ -32,12 +32,8 @@ class CandleScheduler:
         self,
         current_time: datetime,
     ) -> datetime:
-
         if self._timeframe == CandleTimeframe.FIVE_MINUTES:
-
-            minute = (
-                (current_time.minute // 5) + 1
-            ) * 5
+            minute = ((current_time.minute // 5) + 1) * 5
 
             if minute >= 60:
                 return (
@@ -67,7 +63,6 @@ class CandleScheduler:
         self,
         boundary: datetime,
     ) -> datetime:
-
         if self._timeframe == CandleTimeframe.FIVE_MINUTES:
             return boundary - timedelta(minutes=5)
 
@@ -85,17 +80,10 @@ class CandleScheduler:
     ) -> None:
         """
         Notify the consumer that the interval ending at
-        `boundary` has completed.
+        boundary has completed.
         """
-
-        interval_start = self.get_interval_start(
-            boundary
-        )
-
-        # Callback to notify that the candle interval has completed
-        # This will call to finialize candle method inside candle builder
+        interval_start = self.get_interval_start(boundary)
         self._on_boundary(interval_start)
-
 
     # ---------------------------------------------------------
     # Deterministic Cycle
@@ -103,26 +91,17 @@ class CandleScheduler:
 
     def run_once(self, current_time: datetime) -> None:
         """
-        Process one candle scheduling cycle.
-
-        Calculates the next candle boundary and triggers
-        the boundary callback for the completed interval.
+        Process one scheduling cycle without starting a thread.
         """
-
         boundary = self.get_next_boundary(current_time)
-
         self.trigger_boundary(boundary)
-
 
     # ---------------------------------------------------------
     # Runtime Lifecycle
     # ---------------------------------------------------------
 
     def start(self) -> None:
-        """
-        Start the scheduler background thread.
-        """
-
+        """Start the scheduler background thread."""
         if self._running:
             return
 
@@ -135,17 +114,12 @@ class CandleScheduler:
             target=self._run,
             daemon=True,
         )
-
         self._thread.start()
 
         print("CandleScheduler: background thread started")
 
-
     def stop(self) -> None:
-        """
-        Stop the scheduler background thread.
-        """
-
+        """Stop the scheduler background thread."""
         if not self._running:
             return
 
@@ -157,16 +131,21 @@ class CandleScheduler:
 
         self._thread = None
 
-    def stop_after_boundary(self, boundary: datetime) -> None:
+    def stop_after_boundary(
+        self,
+        boundary: datetime,
+    ) -> None:
         """
-        Process the final candle boundary and then stop
-        the scheduler.
+        Process the final candle boundary, then stop the scheduler
+        if it is running.
+
+        The final boundary is processed even if start() was never
+        called, ensuring shutdown does not silently skip finalization.
         """
+        self.trigger_boundary(boundary)
 
         if not self._running:
             return
-
-        self.trigger_boundary(boundary)
 
         self._running = False
         self._stop_event.set()
@@ -178,22 +157,15 @@ class CandleScheduler:
 
     # ---------------------------------------------------------
     # Internal Runtime Loop
-    # --------------------------------------------------------
+    # ---------------------------------------------------------
 
     def _run(self) -> None:
-        """
-        Continuously wait for candle boundaries and trigger them.
-        """
-
+        """Wait for candle boundaries and trigger them."""
         print("CandleScheduler: _run() started")
 
         while self._running:
-
             current_time = datetime.now()
-
-            boundary = self.get_next_boundary(
-                current_time
-            )
+            boundary = self.get_next_boundary(current_time)
 
             wait_seconds = (
                 boundary - current_time
