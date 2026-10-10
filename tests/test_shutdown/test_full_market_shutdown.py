@@ -204,3 +204,111 @@ def test_repeated_market_close_publishes_completion_only_once():
 
     assert len(candle_batches) == 1
     assert len(completion_events) == 1
+
+
+
+
+def test_indicator_failure_does_not_prevent_shutdown_completion():
+    event_bus = EventBus()
+    candle_builder = CandleBuilder(event_bus=event_bus)
+
+    candle_scheduler = CandleScheduler(
+        timeframe=CandleTimeframe.FIVE_MINUTES,
+        on_boundary=candle_builder.finalize_interval,
+    )
+
+    candle_session_manager = CandleSessionManager(
+        event_bus=event_bus,
+        candle_scheduler=candle_scheduler,
+    )
+
+    candle_builder.start()
+    candle_session_manager.start()
+
+    received_events = []
+
+    def failing_indicator_handler(event):
+        raise ValueError("Simulated indicator processing failure")
+
+    event_bus.subscribe(
+        EventType.CANDLE_BATCH_CLOSED,
+        failing_indicator_handler,
+    )
+
+    event_bus.subscribe(
+        EventType.MARKET_PROCESSING_COMPLETE,
+        lambda event: received_events.append(event),
+    )
+
+    # Create an active candle.
+    event_bus.publish(
+        Event(
+            event_type=EventType.TICK_RECEIVED,
+            payload=Tick(
+                symbol="NIFTY",
+                price=25100.0,
+                timestamp=datetime(2026, 9, 27, 14, 56, 0),
+            ),
+        )
+    )
+
+    # Trigger the real shutdown flow.
+    event_bus.publish(
+        Event(
+            event_type=EventType.MARKET_CLOSE,
+            payload=datetime(2026, 9, 27, 15, 0, 0),
+        )
+    )
+
+    # A subscriber failure must not prevent shutdown completion.
+    assert len(received_events) == 1
+    assert (
+        received_events[0].event_type
+        == EventType.MARKET_PROCESSING_COMPLETE
+    )
+
+
+
+def test_market_close_retries_when_finalization_raises():
+    event_bus = EventBus()
+
+    candle_scheduler = CandleScheduler(
+        timeframe=CandleTimeframe.FIVE_MINUTES,
+        on_boundary=lambda boundary: None,
+    )
+
+    candle_session_manager = CandleSessionManager(
+        event_bus=event_bus,
+        candle_scheduler=candle_scheduler,
+    )
+    candle_session_manager.start()
+
+    attempts = []
+
+    def fail_once_then_succeed(boundary):
+        attempts.append(boundary)
+        if len(attempts) == 1:
+            raise RuntimeError("Simulated finalization failure")
+
+    candle_scheduler.stop_after_boundary = fail_once_then_succeed
+
+    completion_events = []
+    event_bus.subscribe(
+        EventType.MARKET_PROCESSING_COMPLETE,
+        lambda event: completion_events.append(event),
+    )
+
+    market_close = Event(
+        event_type=EventType.MARKET_CLOSE,
+        payload=datetime(2026, 9, 27, 15, 0, 0),
+    )
+
+    # First attempt fails. EventBus catches the handler exception.
+    event_bus.publish(market_close)
+    assert len(completion_events) == 0
+
+    # The same boundary must be retried successfully.
+    event_bus.publish(market_close)
+
+    assert len(attempts) == 2
+    assert len(completion_events) == 1

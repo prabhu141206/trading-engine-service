@@ -105,4 +105,75 @@ def test_subscriber_exception_does_not_stop_others():
 
     assert len(received) == 1
 
-    
+
+
+
+def test_subscriber_failure_is_recorded():
+    bus = EventBus()
+
+    def bad_callback(event):
+        raise RuntimeError("Subscriber failed")
+
+    bus.subscribe(EventType.MARKET_OPEN, bad_callback)
+    event = Event(EventType.MARKET_OPEN)
+
+    bus.publish(event)
+
+    assert len(bus.failures) == 1
+    assert bus.failures[0].event is event
+    assert bus.failures[0].callback is bad_callback
+    assert isinstance(bus.failures[0].exception, RuntimeError)
+    assert str(bus.failures[0].exception) == "Subscriber failed"
+
+
+def test_successful_publish_records_no_failure():
+    bus = EventBus()
+
+    bus.subscribe(EventType.MARKET_OPEN, lambda event: None)
+    bus.publish(Event(EventType.MARKET_OPEN))
+
+    assert len(bus.failures) == 0
+
+
+def test_multiple_subscriber_failures_are_recorded_and_dispatch_continues():
+    bus = EventBus()
+    received = []
+
+    def bad_callback_1(event):
+        raise RuntimeError("First failure")
+
+    def good_callback(event):
+        received.append(event)
+
+    def bad_callback_2(event):
+        raise ValueError("Second failure")
+
+    bus.subscribe(EventType.MARKET_OPEN, bad_callback_1)
+    bus.subscribe(EventType.MARKET_OPEN, good_callback)
+    bus.subscribe(EventType.MARKET_OPEN, bad_callback_2)
+
+    event = Event(EventType.MARKET_OPEN)
+    bus.publish(event)
+
+    assert received == [event]
+    assert len(bus.failures) == 2
+    assert str(bus.failures[0].exception) == "First failure"
+    assert str(bus.failures[1].exception) == "Second failure"
+
+
+def test_failure_history_is_bounded():
+    bus = EventBus()
+
+    def bad_callback(event):
+        raise RuntimeError("Subscriber failed")
+
+    bus.subscribe(EventType.MARKET_OPEN, bad_callback)
+
+    for _ in range(105):
+        bus.publish(Event(EventType.MARKET_OPEN))
+
+    assert len(bus.failures) == 100
+    assert all(
+        isinstance(failure.exception, RuntimeError)
+        for failure in bus.failures
+    )
