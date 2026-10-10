@@ -154,7 +154,7 @@ def test_market_close_does_not_silently_skip_final_candle_when_scheduler_is_stop
     ]
 
 
-def test_repeated_market_close_does_not_publish_duplicate_candle_batch():
+def test_repeated_market_close_publishes_completion_only_once():
     event_bus = EventBus()
     candle_builder = CandleBuilder(event_bus=event_bus)
 
@@ -203,4 +203,4 @@ def test_repeated_market_close_does_not_publish_duplicate_candle_batch():
     event_bus.publish(market_close)
 
     assert len(candle_batches) == 1
-    assert len(completion_events) == 2
+    assert len(completion_events) == 1

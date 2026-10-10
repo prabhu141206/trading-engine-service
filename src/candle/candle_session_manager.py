@@ -26,6 +26,7 @@ class CandleSessionManager:
 
         self._event_bus = event_bus
         self._candle_scheduler = candle_scheduler
+        self._last_processed_boundary: datetime | None = None
 
     # ---------------------------------------------------------
     # Lifecycle
@@ -45,20 +46,20 @@ class CandleSessionManager:
     # Event Handlers
     # ---------------------------------------------------------
 
-    def _on_market_close(
-        self,
-        event: Event,
-    ) -> None:
-        """
-        Finalize the final candle boundary and then
-        stop the candle scheduler.
-        """
 
+    def _on_market_close(self, event: Event) -> None:
+        """
+        Finalize the final candle boundary and publish completion
+        only once for each market-close boundary.
+        """
         boundary: datetime = event.payload
 
-        self._candle_scheduler.stop_after_boundary(
-            boundary
-        )
+        if boundary == self._last_processed_boundary:
+            return
+
+        self._last_processed_boundary = boundary
+
+        self._candle_scheduler.stop_after_boundary(boundary)
 
         self._event_bus.publish(
             Event(
