@@ -1,6 +1,8 @@
 from datetime import datetime
 from unittest.mock import Mock
 
+import pytest
+
 from event_system import event_bus
 from event_system.event import Event
 from event_system.event_bus import EventBus
@@ -265,3 +267,45 @@ def test_market_processing_complete_disconnects_websocket():
     assert websocket.connected is False
     assert websocket.subscribed == set()
     assert manager._subscribed_symbols == set()
+
+
+
+
+def test_connect_failure_leaves_manager_disconnected():
+    event_bus = EventBus()
+    registry = SubscriptionRegistry()
+    websocket = FakeWebSocketClient()
+    system_monitor = Mock()
+
+    disconnect_called = False
+
+    def track_disconnect():
+        nonlocal disconnect_called
+        disconnect_called = True
+
+    def fail_connect():
+        raise ConnectionError("Broker unavailable")
+
+    websocket.disconnect = track_disconnect
+    websocket.connect = fail_connect
+
+    manager = MarketDataManager(
+        event_bus=event_bus,
+        subscription_registry=registry,
+        websocket_client=websocket,
+        system_monitor=system_monitor,
+    )
+
+    with pytest.raises(
+        ConnectionError,
+        match="Broker unavailable",
+    ):
+        manager._connect()
+
+    assert manager._connected is False
+    assert manager._accepting_ticks is False
+    assert disconnect_called is True
+
+    system_monitor.update_market_state.assert_called_with(
+        "DISCONNECTED"
+    )

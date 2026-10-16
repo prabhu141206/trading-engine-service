@@ -38,6 +38,7 @@ class MarketDataManager:
         # Internal State
         # ---------------------------------------------------------
         self._connected = False
+        self._accepting_ticks = False
         self._subscribed_symbols: set[str] = set()
 
     # ---------------------------------------------------------
@@ -113,21 +114,36 @@ class MarketDataManager:
     # ---------------------------------------------------------
     # Connection Management
     # ---------------------------------------------------------
+    
 
     def _connect(self) -> None:
         """
-        Establish websocket connection if not already connected.
+        Establish the WebSocket connection safely.
         """
-
         if self._connected:
             return
 
         self._websocket_client.set_tick_handler(self._on_tick)
-        self._websocket_client.connect()
+
+        try:
+            self._websocket_client.connect()
+        except Exception:
+            self._connected = False
+            self._accepting_ticks = False
+
+            # Best-effort cleanup in case the client partially connected.
+            try:
+                self._websocket_client.disconnect()
+            except Exception:
+                pass
+
+            self._system_monitor.update_market_state("DISCONNECTED")
+            raise
 
         self._connected = True
-
         self._system_monitor.update_market_state("CONNECTED")
+
+
 
     def _sync_subscriptions(self) -> None:
         """
